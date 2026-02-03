@@ -214,8 +214,14 @@ function App() {
 
   // When currentUser changes (e.g., after login), ensure we're on feed view
   useEffect(() => {
-    if (currentUser && currentView !== 'feed') {
+    if (currentUser) {
+      // Always set to feed view when user logs in
       setCurrentView('feed')
+      // Close auth modal if it was open
+      setShowAuthModal(false)
+    } else {
+      // If no user, ensure auth modal is shown
+      setShowAuthModal(true)
     }
   }, [currentUser])
 

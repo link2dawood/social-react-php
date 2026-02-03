@@ -98,7 +98,11 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
     await setCurrentUser(newUser)
     toast.success(`Welcome to Lerumos, ${newUser.displayName}!`)
-    onClose()
+    
+    // Reload page to ensure state syncs properly
+    setTimeout(() => {
+      window.location.reload()
+    }, 500)
     } catch (error: any) {
       toast.error(error.message || 'Failed to create account')
     } finally {
@@ -139,13 +143,13 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     // Set user state - this will trigger App.tsx to re-render
     await setCurrentUser(user)
     
-    // Force a small delay to ensure state is persisted
-    await new Promise(resolve => setTimeout(resolve, 50))
-    
     toast.success(`Welcome back, ${user.displayName}!`)
     
-    // Close modal - App.tsx will detect currentUser change and show dashboard
-    onClose()
+    // Close modal and reload page to ensure state syncs properly
+    // This ensures App.tsx picks up the currentUser from localStorage
+    setTimeout(() => {
+      window.location.reload()
+    }, 500)
     } catch (error: any) {
       toast.error(error.message || 'Login failed')
     } finally {
