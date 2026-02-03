@@ -1,0 +1,17 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+.env
+.env.local
+.DS_Store
+*.log
+backend/database.db
+backend/uploads/*
+!backend/uploads/.gitkeep
+public/*
+frontend/dist
+frontend/node_modules
+.vscode
+.idea
+

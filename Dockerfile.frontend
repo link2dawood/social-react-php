@@ -1,0 +1,70 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY frontend/package*.json ./
+
+# Install dependencies (use install instead of ci due to lock file sync issues)
+RUN npm install --legacy-peer-deps
+
+# Copy source code
+COPY frontend/ ./
+
+# Build the application (set DOCKER_BUILD to use dist directory)
+ENV DOCKER_BUILD=1
+RUN npm run build
+
+# Production stage
+FROM php:8.1-apache
+
+# Install system dependencies and SQLite
+RUN apt-get update && apt-get install -y \
+    libsqlite3-dev \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install SQLite extension
+RUN docker-php-ext-install pdo pdo_sqlite
+
+# Enable Apache modules
+RUN a2enmod rewrite headers
+
+WORKDIR /var/www/html
+
+# Copy backend files
+COPY backend/ /var/www/html/backend/
+
+# Copy built frontend from builder (Vite outputs to dist when DOCKER_BUILD is set)
+COPY --from=builder /app/dist/ /var/www/html/
+
+# Copy .htaccess
+COPY .htaccess /var/www/html/
+
+# Create uploads directory and set permissions
+RUN mkdir -p /var/www/html/backend/uploads && \
+    chown -R www-data:www-data /var/www/html && \
+    chmod -R 755 /var/www/html && \
+    chmod -R 777 /var/www/html/backend/uploads
+
+# Configure Apache
+RUN echo '<VirtualHost *:80>\n\
+    DocumentRoot /var/www/html\n\
+    <Directory /var/www/html>\n\
+        Options -Indexes +FollowSymLinks\n\
+        AllowOverride All\n\
+        Require all granted\n\
+    </Directory>\n\
+    ErrorLog ${APACHE_LOG_DIR}/error.log\n\
+    CustomLog ${APACHE_LOG_DIR}/access.log combined\n\
+</VirtualHost>' > /etc/apache2/sites-available/000-default.conf
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+EXPOSE 80
+
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["apache2-foreground"]
+

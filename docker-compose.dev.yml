@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.php
+    container_name: social-media-backend
+    ports:
+      - "8080:80"
+    volumes:
+      - ./backend:/var/www/html/backend
+      - ./public:/var/www/html
+      - ./.htaccess:/var/www/html/.htaccess
+    environment:
+      - PHP_INI_SCAN_DIR=/usr/local/etc/php/conf.d
+      - APP_ENV=${APP_ENV:-development}
+      - APP_DEBUG=${APP_DEBUG:-true}
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: social-media-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8080/backend}
+      - VITE_APP_NAME=${VITE_APP_NAME:-Lerumos}
+      - VITE_APP_URL=${VITE_APP_URL:-http://localhost:8080}
+    env_file:
+      - frontend/.env
+    command: npm run dev -- --host 0.0.0.0
+    depends_on:
+      - backend
+

@@ -1,0 +1,29 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: social-media-app
+    ports:
+      - "8080:80"
+    volumes:
+      # Mount database and uploads for persistence
+      - ./backend/database.db:/var/www/html/backend/database.db
+      - ./backend/uploads:/var/www/html/backend/uploads
+      # Mount backend directory for development (PHP changes reflected immediately)
+      - ./backend:/var/www/html/backend
+    environment:
+      - PHP_INI_SCAN_DIR=/usr/local/etc/php/conf.d
+      # Load environment variables from .env file
+      - APP_ENV=${APP_ENV:-production}
+      - APP_DEBUG=${APP_DEBUG:-false}
+      - APP_URL=${APP_URL:-http://localhost:8080}
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /var/www/html/backend/db.php || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

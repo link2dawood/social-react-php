@@ -1,0 +1,114 @@
+===========================================
+ROOT .env FILE CONTENT
+===========================================
+Location: php-backend-social-media-ecommerce-generic-1769754811705/.env
+
+APP_ENV=development
+APP_DEBUG=true
+APP_NAME=Lerumos Social Media Platform
+APP_URL=http://localhost:8080
+
+# Database Configuration
+DB_TYPE=sqlite
+DB_PATH=backend/database.db
+
+# File Upload Configuration
+UPLOAD_DIR=backend/uploads/
+MAX_UPLOAD_SIZE=52428800
+ALLOWED_EXTENSIONS=jpg,jpeg,png,gif,mp3,mp4,pdf
+
+# Session Configuration
+SESSION_LIFETIME=7200
+SESSION_NAME=social_media_session
+
+# Security - Generated random keys
+SECRET_KEY=aB3xK9mP2qR7vW4yZ8cF1gH5jL6nT0sU3wX7bD9eG2hJ4kM8pQ1rS5tV6uY0zA
+JWT_SECRET=3f8a9b2c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0
+
+# CORS Configuration
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:8080,http://localhost:3000
+CORS_ALLOWED_METHODS=GET,POST,PUT,DELETE,OPTIONS
+CORS_ALLOWED_HEADERS=Content-Type,Authorization,X-Requested-With
+
+# API Configuration
+API_BASE_URL=/backend
+API_VERSION=v1
+
+# Frontend Configuration (for Vite)
+VITE_API_BASE_URL=http://localhost:8080/backend
+VITE_APP_NAME=Lerumos
+VITE_APP_URL=http://localhost:8080
+
+# Email Configuration (if using email features)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM_EMAIL=noreply@example.com
+SMTP_FROM_NAME=Lerumos Platform
+
+# Payment Gateway Configuration (if using)
+STRIPE_PUBLIC_KEY=
+STRIPE_SECRET_KEY=
+PAYPAL_CLIENT_ID=
+PAYPAL_SECRET=
+
+# Admin Configuration
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=change-this-admin-password
+
+# Logging
+LOG_LEVEL=debug
+LOG_FILE=backend/logs/app.log
+
+# Rate Limiting
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_REQUESTS=100
+RATE_LIMIT_WINDOW=60
+
+# Cache Configuration
+CACHE_ENABLED=false
+CACHE_DRIVER=file
+CACHE_TTL=3600
+
+
+===========================================
+FRONTEND .env FILE CONTENT
+===========================================
+Location: php-backend-social-media-ecommerce-generic-1769754811705/frontend/.env
+
+VITE_API_BASE_URL=http://localhost:8080/backend
+VITE_APP_NAME=Lerumos
+VITE_APP_URL=http://localhost:8080
+VITE_APP_ENV=development
+VITE_ENABLE_ANALYTICS=false
+VITE_ENABLE_PAYMENTS=false
+
+
+===========================================
+NOTES
+===========================================
+
+1. Root .env file is used by:
+   - PHP backend (via backend/env.php and backend/config.php)
+   - Docker Compose (via env_file directive)
+
+2. Frontend .env file is used by:
+   - Vite build process
+   - React application at runtime
+   - Variables must be prefixed with VITE_ to be accessible
+
+3. Important Variables:
+   - SECRET_KEY and JWT_SECRET: Change these in production!
+   - APP_URL: Update for your domain in production
+   - VITE_API_BASE_URL: Should match your backend URL
+
+4. For Docker:
+   - Both .env files are automatically loaded
+   - Environment variables are available in containers
+
+5. For Local Development:
+   - Root .env: Used by PHP backend
+   - Frontend .env: Used by Vite dev server
+
+
