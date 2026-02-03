@@ -96,13 +96,23 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
         isVerified: userData.isVerified || false
       }
 
-    await setCurrentUser(newUser)
-    toast.success(`Welcome to Lerumos, ${newUser.displayName}!`)
-    
-    // Reload page to ensure state syncs properly
-    setTimeout(() => {
-      window.location.reload()
-    }, 500)
+      await setCurrentUser(newUser)
+      
+      // Also save directly to localStorage with the key that useKV uses
+      try {
+        localStorage.setItem('@github/spark:currentUser', JSON.stringify(newUser))
+        // Also save with plain key as backup
+        localStorage.setItem('currentUser', JSON.stringify(newUser))
+      } catch (e) {
+        console.error('Failed to save user to localStorage:', e)
+      }
+      
+      toast.success(`Welcome to Lerumos, ${newUser.displayName}!`)
+      
+      // Reload page to ensure state syncs properly
+      setTimeout(() => {
+        window.location.reload()
+      }, 500)
     } catch (error: any) {
       toast.error(error.message || 'Failed to create account')
     } finally {
@@ -142,6 +152,16 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
     // Set user state - this will trigger App.tsx to re-render
     await setCurrentUser(user)
+    
+    // Also save directly to localStorage with the key that useKV uses
+    // useKV from @github/spark/hooks uses '@github/spark:key' format
+    try {
+      localStorage.setItem('@github/spark:currentUser', JSON.stringify(user))
+      // Also save with plain key as backup
+      localStorage.setItem('currentUser', JSON.stringify(user))
+    } catch (e) {
+      console.error('Failed to save user to localStorage:', e)
+    }
     
     toast.success(`Welcome back, ${user.displayName}!`)
     

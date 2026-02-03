@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useKV } from '@github/spark/hooks'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,8 +22,9 @@ import {
   Camera,
   Image as ImageIcon
 } from '@phosphor-icons/react'
-import type { User, Post } from '@/App'
+import type { User, Post, PoliticalParty } from '@/App'
 import { toast } from 'sonner'
+import api from '@/lib/api'
 
 interface ProfilePanelProps {
   user: User
@@ -37,8 +38,43 @@ export function ProfilePanel({ user, currentUser, onUserUpdate }: ProfilePanelPr
   
   const [, setCurrentUser] = useKV<User | null>('currentUser', null)
   const [users, setUsers] = useKV<User[]>('users', [])
-  const [posts] = useKV<Post[]>('posts', [])
+  const [posts, setPosts] = useKV<Post[]>('posts', [])
   const [isEditing, setIsEditing] = useState(false)
+  
+  // Load posts from backend when viewing profile
+  useEffect(() => {
+    const loadPosts = async () => {
+      try {
+        const backendPosts = await api.getPosts({ limit: 100 })
+        const postsArray = Array.isArray(backendPosts) 
+          ? backendPosts 
+          : backendPosts.posts || backendPosts.data || []
+        
+        const transformedPosts: Post[] = postsArray.map((p: any) => ({
+          id: String(p.id),
+          userId: String(p.userId),
+          content: p.content || '',
+          image: p.image || undefined,
+          video: p.video || undefined,
+          type: p.type || 'post',
+          party: (p.party || 'independent') as PoliticalParty,
+          timestamp: p.timestamp || new Date().toISOString(),
+          likes: p.likes || [],
+          comments: p.comments || [],
+          tips: p.tips || [],
+          shares: p.shares || 0
+        }))
+        
+        transformedPosts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        setPosts(transformedPosts)
+      } catch (error) {
+        console.error('Failed to load posts for profile:', error)
+        // Keep existing posts from localStorage if backend fails
+      }
+    }
+    
+    loadPosts()
+  }, [user.id]) // Reload when viewing different user
   const [editForm, setEditForm] = useState({
     displayName: user.displayName,
     bio: user.bio || '',

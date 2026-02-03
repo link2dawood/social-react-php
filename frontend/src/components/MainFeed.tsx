@@ -11,6 +11,7 @@ import { PostCard } from '@/components/PostCard'
 import { Camera, Image as ImageIcon, VideoCamera, X } from '@phosphor-icons/react'
 import type { User, Post, PoliticalParty } from '@/App'
 import { toast } from 'sonner'
+import api from '@/lib/api'
 
 interface MainFeedProps {
   user: User
@@ -23,8 +24,67 @@ export function MainFeed({ user, onHashtagClick }: MainFeedProps) {
   const [postImage, setPostImage] = useState('')
   const [postVideo, setPostVideo] = useState('')
   const [activeTab, setActiveTab] = useState<'republican' | 'democrat' | 'independent'>('republican')
+  const [loading, setLoading] = useState(true)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
+
+  // Load posts from backend on mount
+  useEffect(() => {
+    const loadPosts = async () => {
+      try {
+        setLoading(true)
+        const backendPosts = await api.getPosts({ limit: 50 })
+        
+        // Handle backend response format (could be array or object with posts/data)
+        const postsArray = Array.isArray(backendPosts) 
+          ? backendPosts 
+          : backendPosts.posts || backendPosts.data || []
+        
+        // Transform backend posts to frontend Post format
+        const transformedPosts: Post[] = postsArray.map((p: any) => ({
+          id: String(p.id),
+          userId: String(p.userId),
+          content: p.content || '',
+          image: p.image || undefined,
+          video: p.video || undefined,
+          type: p.type || 'post',
+          party: (p.party || 'independent') as PoliticalParty,
+          timestamp: p.timestamp || new Date().toISOString(),
+          likes: p.likes || [],
+          comments: p.comments || [],
+          tips: p.tips || [],
+          shares: p.shares || 0
+        }))
+
+        // Merge with localStorage posts (prefer backend posts)
+        const existingPosts = posts || []
+        const mergedPosts = [...transformedPosts]
+        
+        // Add localStorage posts that aren't in backend (for offline/new posts)
+        existingPosts.forEach(localPost => {
+          if (!transformedPosts.find(p => p.id === localPost.id)) {
+            mergedPosts.push(localPost)
+          }
+        })
+
+        // Sort by timestamp (newest first)
+        mergedPosts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        
+        setPosts(mergedPosts)
+      } catch (error) {
+        console.error('Failed to load posts from backend:', error)
+        // Keep localStorage posts if backend fails
+        // If no posts in localStorage, show empty state
+        if (!posts || posts.length === 0) {
+          setPosts([])
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadPosts()
+  }, []) // Only run on mount
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -70,26 +130,95 @@ export function MainFeed({ user, onHashtagClick }: MainFeedProps) {
       return
     }
 
-    const newPost: Post = {
-      id: `post_${Date.now()}`,
-      userId: user.id,
-      content: newPostContent,
-      image: postImage || undefined,
-      video: postVideo || undefined,
-      type: 'post',
-      party: user.party,
-      timestamp: new Date().toISOString(),
-      likes: [],
-      comments: [],
-      tips: [],
-      shares: 0
-    }
+    try {
+      // Save to backend first
+      const mediaUrl = postImage || postVideo || undefined
+      const mediaType = postImage ? 'image' : postVideo ? 'video' : undefined
+      
+      const backendPost = await api.createPost({
+        content: newPostContent,
+        media_url: mediaUrl,
+        media_type: mediaType,
+        type: 'post',
+        party: user.party
+      })
 
-    setPosts(currentPosts => [newPost, ...(currentPosts || [])])
-    setNewPostContent('')
-    setPostImage('')
-    setPostVideo('')
-    toast.success('Post shared!')
+      // Extract post ID from response
+      const postId = backendPost?.id || backendPost?.data?.id || null
+
+      // Clear form immediately
+      setNewPostContent('')
+      setPostImage('')
+      setPostVideo('')
+      
+      toast.success('Post shared!')
+      
+      // Refresh posts from backend to get the complete post data
+      try {
+        const refreshedPosts = await api.getPosts({ limit: 50 })
+        const postsArray = Array.isArray(refreshedPosts) 
+          ? refreshedPosts 
+          : refreshedPosts.posts || refreshedPosts.data || []
+        
+        const transformedPosts: Post[] = postsArray.map((p: any) => ({
+          id: String(p.id),
+          userId: String(p.userId),
+          content: p.content || '',
+          image: p.image || undefined,
+          video: p.video || undefined,
+          type: p.type || 'post',
+          party: (p.party || 'independent') as PoliticalParty,
+          timestamp: p.timestamp || new Date().toISOString(),
+          likes: p.likes || [],
+          comments: p.comments || [],
+          tips: p.tips || [],
+          shares: p.shares || 0
+        }))
+        
+        transformedPosts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        setPosts(transformedPosts)
+      } catch (refreshError) {
+        console.error('Failed to refresh posts:', refreshError)
+        // Fallback: add post locally if refresh fails
+        const newPost: Post = {
+          id: String(postId || Date.now()),
+          userId: user.id,
+          content: newPostContent,
+          image: postImage || undefined,
+          video: postVideo || undefined,
+          type: 'post',
+          party: user.party,
+          timestamp: new Date().toISOString(),
+          likes: [],
+          comments: [],
+          tips: [],
+          shares: 0
+        }
+        setPosts(currentPosts => [newPost, ...(currentPosts || [])])
+      }
+    } catch (error: any) {
+      console.error('Failed to create post:', error)
+      // Fallback to localStorage only if backend fails
+      const newPost: Post = {
+        id: `post_${Date.now()}`,
+        userId: user.id,
+        content: newPostContent,
+        image: postImage || undefined,
+        video: postVideo || undefined,
+        type: 'post',
+        party: user.party,
+        timestamp: new Date().toISOString(),
+        likes: [],
+        comments: [],
+        tips: [],
+        shares: 0
+      }
+      setPosts(currentPosts => [newPost, ...(currentPosts || [])])
+      setNewPostContent('')
+      setPostImage('')
+      setPostVideo('')
+      toast.success('Post shared! (saved locally)')
+    }
   }
 
   const filteredPosts = (posts || []).filter(post => post.party === activeTab)
@@ -99,6 +228,19 @@ export function MainFeed({ user, onHashtagClick }: MainFeedProps) {
     { value: 'democrat', label: 'Democrat', color: 'text-democrat' },
     { value: 'independent', label: 'Independent', color: 'text-independent' }
   ]
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardContent className="p-8 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading posts...</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

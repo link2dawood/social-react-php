@@ -1,6 +1,54 @@
 <?php
+// db.php already sets CORS headers, but ensure they're set before session_start()
 require_once 'db.php';
 require_once 'config.php';
+
+// Ensure CORS headers are properly set (db.php should have already set them)
+if (php_sapi_name() !== 'cli' && isset($_SERVER['REQUEST_METHOD'])) {
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? $_SERVER['HTTP_REFERER'] ?? null;
+    
+    if (!$origin && isset($_SERVER['HTTP_REFERER'])) {
+        $referer = $_SERVER['HTTP_REFERER'];
+        $parsed = parse_url($referer);
+        if ($parsed) {
+            $origin = $parsed['scheme'] . '://' . $parsed['host'];
+            if (isset($parsed['port'])) {
+                $origin .= ':' . $parsed['port'];
+            }
+        }
+    }
+    
+    if ($origin && $origin !== '*') {
+        $origin = rtrim($origin, '/');
+        if (strpos($origin, '127.0.0.1') !== false) {
+            $originLocalhost = str_replace('127.0.0.1', 'localhost', $origin);
+            if (defined('CORS_ALLOWED_ORIGINS') && in_array($originLocalhost, CORS_ALLOWED_ORIGINS)) {
+                $origin = $originLocalhost;
+            }
+        }
+        if (strpos($origin, 'localhost') !== false) {
+            $origin127 = str_replace('localhost', '127.0.0.1', $origin);
+            if (defined('CORS_ALLOWED_ORIGINS') && in_array($origin127, CORS_ALLOWED_ORIGINS)) {
+                $origin = $origin127;
+            }
+        }
+    }
+    
+    if ($origin && defined('CORS_ALLOWED_ORIGINS') && (in_array($origin, CORS_ALLOWED_ORIGINS) || in_array('*', CORS_ALLOWED_ORIGINS))) {
+        header("Access-Control-Allow-Origin: $origin", true);
+    } else {
+        header("Access-Control-Allow-Origin: *", true);
+    }
+    
+    header("Access-Control-Allow-Methods: " . (defined('CORS_ALLOWED_METHODS') ? CORS_ALLOWED_METHODS : 'GET,POST,PUT,DELETE,OPTIONS'));
+    header("Access-Control-Allow-Headers: " . (defined('CORS_ALLOWED_HEADERS') ? CORS_ALLOWED_HEADERS : 'Content-Type,Authorization,X-Requested-With'));
+    header("Access-Control-Allow-Credentials: true");
+    
+    if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+        http_response_code(200);
+        exit;
+    }
+}
 
 session_start();
 

@@ -48,6 +48,10 @@ class ApiService {
     if (data.posts !== undefined) {
       return data.posts as T
     }
+    // For content.php?action=list, check data.data first
+    if (data.data && Array.isArray(data.data)) {
+      return data.data as T
+    }
     
     return data as T
   }

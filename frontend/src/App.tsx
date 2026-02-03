@@ -203,7 +203,7 @@ function App() {
         // First check localStorage for user (in case of recent login/signup)
         // Check both possible key formats that useKV might use
         let storedUser = null
-        const possibleKeys = ['currentUser', 'kv:currentUser', '@github/spark:currentUser']
+        const possibleKeys = ['@github/spark:currentUser', 'currentUser', 'kv:currentUser']
         for (const key of possibleKeys) {
           const stored = localStorage.getItem(key)
           if (stored) {
@@ -248,10 +248,16 @@ function App() {
                 isVerified: userData.isVerified || false
               }
               setCurrentUser(user)
+              // Ensure feed view is set after API verification
+              setCurrentView('feed')
             }
           } catch (apiError) {
             // API verification failed, but keep localStorage user
             console.log('API verification failed, using localStorage user')
+            // Still ensure feed view is set
+            setCurrentView('feed')
+            // Ensure loading is false so dashboard shows
+            setLoading(false)
           }
           return
         }
@@ -278,7 +284,11 @@ function App() {
             isVerified: userData.isVerified || false
           }
           setCurrentUser(user)
+          // Always set to feed view when user loads from API
           setCurrentView('feed')
+        } else {
+          // No user found, show auth modal
+          setShowAuthModal(true)
         }
       } catch (error) {
         // User not authenticated
