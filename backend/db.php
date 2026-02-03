@@ -36,11 +36,47 @@ if (DB_TYPE === 'sqlite') {
 }
 
 // CORS Headers (only set if running via web server, not CLI)
+// Must be set before any output or session operations
 if (php_sapi_name() !== 'cli' && isset($_SERVER['REQUEST_METHOD'])) {
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
-    if (in_array($origin, CORS_ALLOWED_ORIGINS) || in_array('*', CORS_ALLOWED_ORIGINS)) {
+    // Get origin from request
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? $_SERVER['HTTP_REFERER'] ?? null;
+    
+    // If no origin, try to extract from referer
+    if (!$origin && isset($_SERVER['HTTP_REFERER'])) {
+        $referer = $_SERVER['HTTP_REFERER'];
+        $parsed = parse_url($referer);
+        if ($parsed) {
+            $origin = $parsed['scheme'] . '://' . $parsed['host'];
+            if (isset($parsed['port'])) {
+                $origin .= ':' . $parsed['port'];
+            }
+        }
+    }
+    
+    // Normalize origin
+    if ($origin && $origin !== '*') {
+        $origin = rtrim($origin, '/');
+        // Handle 127.0.0.1 -> localhost conversion
+        if (strpos($origin, '127.0.0.1') !== false) {
+            $originLocalhost = str_replace('127.0.0.1', 'localhost', $origin);
+            if (in_array($originLocalhost, CORS_ALLOWED_ORIGINS)) {
+                $origin = $originLocalhost;
+            }
+        }
+        // Handle localhost -> 127.0.0.1 conversion
+        if (strpos($origin, 'localhost') !== false) {
+            $origin127 = str_replace('localhost', '127.0.0.1', $origin);
+            if (in_array($origin127, CORS_ALLOWED_ORIGINS)) {
+                $origin = $origin127;
+            }
+        }
+    }
+    
+    // Set CORS headers
+    if ($origin && (in_array($origin, CORS_ALLOWED_ORIGINS) || in_array('*', CORS_ALLOWED_ORIGINS))) {
         header("Access-Control-Allow-Origin: $origin");
     } else {
+        // Default to allow all origins if not in list
         header("Access-Control-Allow-Origin: *");
     }
 
@@ -48,7 +84,9 @@ if (php_sapi_name() !== 'cli' && isset($_SERVER['REQUEST_METHOD'])) {
     header("Access-Control-Allow-Methods: " . CORS_ALLOWED_METHODS);
     header("Access-Control-Allow-Headers: " . CORS_ALLOWED_HEADERS);
     header("Access-Control-Allow-Credentials: true");
+    header("Access-Control-Max-Age: 86400"); // Cache preflight for 24 hours
 
+    // Handle preflight OPTIONS request
     if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
         http_response_code(200);
         exit;

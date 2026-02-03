@@ -31,8 +31,22 @@ define('SECRET_KEY', Env::get('SECRET_KEY', 'change-this-in-production'));
 define('JWT_SECRET', Env::get('JWT_SECRET', 'change-this-in-production'));
 
 // CORS Configuration
-$corsOrigins = Env::get('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://localhost:8080');
-define('CORS_ALLOWED_ORIGINS', explode(',', $corsOrigins));
+$corsOrigins = Env::get('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000');
+$corsOriginsArray = array_map('trim', explode(',', $corsOrigins));
+// Add both localhost and 127.0.0.1 variants for each port
+$expandedOrigins = [];
+foreach ($corsOriginsArray as $origin) {
+    $expandedOrigins[] = $origin;
+    // Add localhost variant if 127.0.0.1
+    if (strpos($origin, '127.0.0.1') !== false) {
+        $expandedOrigins[] = str_replace('127.0.0.1', 'localhost', $origin);
+    }
+    // Add 127.0.0.1 variant if localhost
+    if (strpos($origin, 'localhost') !== false) {
+        $expandedOrigins[] = str_replace('localhost', '127.0.0.1', $origin);
+    }
+}
+define('CORS_ALLOWED_ORIGINS', array_unique($expandedOrigins));
 define('CORS_ALLOWED_METHODS', Env::get('CORS_ALLOWED_METHODS', 'GET,POST,PUT,DELETE,OPTIONS'));
 define('CORS_ALLOWED_HEADERS', Env::get('CORS_ALLOWED_HEADERS', 'Content-Type,Authorization,X-Requested-With'));
 

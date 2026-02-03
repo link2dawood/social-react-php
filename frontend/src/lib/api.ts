@@ -228,6 +228,26 @@ class ApiService {
   async getAdminData() {
     return this.request<any>('/admin.php')
   }
+
+  // Settings endpoints
+  async getSiteSettings() {
+    return this.request<any>('/settings.php?action=get')
+  }
+
+  async saveSiteSettings(settings: any) {
+    return this.request<any>('/settings.php?action=set', {
+      method: 'POST',
+      body: JSON.stringify({
+        key: 'siteSettings',
+        value: settings
+      }),
+    })
+  }
+
+  async isSetupComplete() {
+    const response = await this.request<{ isSetupComplete: boolean }>('/settings.php?action=isSetupComplete')
+    return response.isSetupComplete || false
+  }
 }
 
 export const api = new ApiService()

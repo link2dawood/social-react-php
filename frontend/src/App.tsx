@@ -158,19 +158,41 @@ function App() {
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showSetupWizard, setShowSetupWizard] = useState(false)
   
-  // Check if setup is complete on mount - only show wizard if explicitly not complete
+  // Check setup completion from database on mount
   useEffect(() => {
-    // Only show wizard if:
-    // 1. No current user (not logged in)
-    // 2. siteSettings exists
-    // 3. isSetupComplete is explicitly false
-    // Don't show wizard if user is logged in OR if setup is already complete
-    if (!currentUser && siteSettings && siteSettings.isSetupComplete === false) {
-      setShowSetupWizard(true)
-    } else {
-      setShowSetupWizard(false)
+    const checkSetup = async () => {
+      // Don't show wizard if user is logged in
+      if (currentUser) {
+        setShowSetupWizard(false)
+        return
+      }
+      
+      try {
+        // Check database first
+        const isComplete = await api.isSetupComplete()
+        if (isComplete) {
+          // Setup is complete in database
+          setShowSetupWizard(false)
+          // Update localStorage to match database
+          if (siteSettings && !siteSettings.isSetupComplete) {
+            setSiteSettings({ ...siteSettings, isSetupComplete: true })
+          }
+        } else {
+          // Setup not complete, show wizard
+          setShowSetupWizard(true)
+        }
+      } catch (error) {
+        // If API fails, fall back to localStorage check
+        console.log('Failed to check setup status from database, using localStorage')
+        if (siteSettings && siteSettings.isSetupComplete === false) {
+          setShowSetupWizard(true)
+        } else {
+          setShowSetupWizard(false)
+        }
+      }
     }
-  }, [siteSettings, currentUser])
+    checkSetup()
+  }, [currentUser]) // Only re-check when currentUser changes
   const [viewingUserId, setViewingUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -178,6 +200,63 @@ function App() {
   useEffect(() => {
     const loadUser = async () => {
       try {
+        // First check localStorage for user (in case of recent login/signup)
+        // Check both possible key formats that useKV might use
+        let storedUser = null
+        const possibleKeys = ['currentUser', 'kv:currentUser', '@github/spark:currentUser']
+        for (const key of possibleKeys) {
+          const stored = localStorage.getItem(key)
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored)
+              if (parsed && parsed.id) {
+                storedUser = parsed
+                break
+              }
+            } catch (e) {
+              // Try next key
+            }
+          }
+        }
+        
+        if (storedUser) {
+          // User exists in localStorage, set it and verify with API
+          setCurrentUser(storedUser)
+          setCurrentView('feed')
+          setLoading(false)
+          
+          // Verify session with API in background
+          try {
+            const userData = await api.getCurrentUser()
+            if (userData) {
+              const user: User = {
+                id: String(userData.id),
+                username: userData.username || '',
+                displayName: userData.displayName || userData.name || '',
+                party: (userData.party || 'independent') as PoliticalParty,
+                bio: userData.bio,
+                avatar: userData.avatar,
+                followers: userData.followers || [],
+                following: userData.following || [],
+                friends: userData.friends || [],
+                earnings: userData.earnings || 0,
+                totalTips: userData.totalTips || 0,
+                joinDate: userData.joinDate || new Date().toISOString(),
+                followerCount: userData.followerCount || 0,
+                impressions: userData.impressions || 0,
+                tokens: userData.tokens || 0,
+                isVerified: userData.isVerified || false
+              }
+              setCurrentUser(user)
+            }
+          } catch (apiError) {
+            // API verification failed, but keep localStorage user
+            console.log('API verification failed, using localStorage user')
+          }
+          return
+        }
+        
+        // No user in localStorage, try API
         const userData = await api.getCurrentUser()
         if (userData) {
           const user: User = {
@@ -199,7 +278,6 @@ function App() {
             isVerified: userData.isVerified || false
           }
           setCurrentUser(user)
-          // Ensure we're on the feed view when user loads
           setCurrentView('feed')
         }
       } catch (error) {

@@ -10,6 +10,7 @@ import { Progress } from '@/components/ui/progress'
 import { SiteSettings } from '@/App'
 import { ArrowRight, ArrowLeft, Check, Eye, EyeSlash } from '@phosphor-icons/react'
 import { toast } from 'sonner'
+import api from '@/lib/api'
 
 interface SetupWizardProps {
   isOpen: boolean
@@ -51,20 +52,28 @@ export function SetupWizard({ isOpen, onComplete }: SetupWizardProps) {
     }
 
     const completedSettings = { ...formData, isSetupComplete: true }
-    // Save to localStorage immediately to ensure persistence
-    await setSiteSettings(completedSettings)
-    // Also save directly to localStorage as backup to ensure it persists
-    try {
-      localStorage.setItem('siteSettings', JSON.stringify(completedSettings))
-    } catch (e) {
-      console.error('Failed to save siteSettings to localStorage:', e)
-    }
     
-    toast.success('Setup complete! Welcome to Lerumos.')
-    // Small delay to ensure state is saved before closing
-    setTimeout(() => {
-      onComplete()
-    }, 200)
+    try {
+      // Save to database first
+      await api.saveSiteSettings(completedSettings)
+      
+      // Then save to localStorage
+      await setSiteSettings(completedSettings)
+      // Also save directly to localStorage as backup
+      try {
+        localStorage.setItem('siteSettings', JSON.stringify(completedSettings))
+      } catch (e) {
+        console.error('Failed to save siteSettings to localStorage:', e)
+      }
+      
+      toast.success('Setup complete! Welcome to Lerumos.')
+      // Small delay to ensure state is saved before closing
+      setTimeout(() => {
+        onComplete()
+      }, 200)
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save setup. Please try again.')
+    }
   }
 
   return (
