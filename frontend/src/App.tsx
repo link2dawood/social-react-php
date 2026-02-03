@@ -199,6 +199,8 @@ function App() {
             isVerified: userData.isVerified || false
           }
           setCurrentUser(user)
+          // Ensure we're on the feed view when user loads
+          setCurrentView('feed')
         }
       } catch (error) {
         // User not authenticated
@@ -209,6 +211,13 @@ function App() {
     }
     loadUser()
   }, [])
+
+  // When currentUser changes (e.g., after login), ensure we're on feed view
+  useEffect(() => {
+    if (currentUser && currentView !== 'feed') {
+      setCurrentView('feed')
+    }
+  }, [currentUser])
 
   const handleUserUpdate = (updatedUser: User) => {
     setCurrentUser(updatedUser)
@@ -249,7 +258,15 @@ function App() {
   }
 
   if (!currentUser) {
-    return <AuthModal isOpen={true} onClose={() => {}} />
+    return (
+      <AuthModal 
+        isOpen={true} 
+        onClose={() => {
+          // Modal will close when currentUser is set
+          // The useEffect will handle redirecting to feed
+        }} 
+      />
+    )
   }
 
   const themeClass = `theme-${currentUser.party}`
