@@ -206,12 +206,27 @@ try {
             break;
             
         case 'create':
+            // Debug: Log session info
+            error_log('Create post - Session ID: ' . session_id());
+            error_log('Create post - User ID in session: ' . (isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'NOT SET'));
+            error_log('Create post - All session data: ' . json_encode($_SESSION));
+            
             if (!isset($_SESSION['user_id'])) {
-                throw new Exception('Authentication required');
+                error_log('Create post - Authentication failed: No user_id in session');
+                throw new Exception('Authentication required. Please log in again.');
             }
             
-            $data = json_decode(file_get_contents("php://input"), true);
+            $rawInput = file_get_contents("php://input");
+            error_log('Create post - Raw input: ' . $rawInput);
+            $data = json_decode($rawInput, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                error_log('Create post - JSON decode error: ' . json_last_error_msg());
+                throw new Exception('Invalid JSON data: ' . json_last_error_msg());
+            }
+            
             if (!isset($data['content'])) {
+                error_log('Create post - Missing content in data: ' . json_encode($data));
                 throw new Exception('Content required');
             }
             

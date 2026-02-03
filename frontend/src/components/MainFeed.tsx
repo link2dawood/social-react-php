@@ -35,10 +35,12 @@ export function MainFeed({ user, onHashtagClick }: MainFeedProps) {
         setLoading(true)
         const backendPosts = await api.getPosts({ limit: 50 })
         
-        // Handle backend response format (could be array or object with posts/data)
+        // Backend returns: {success: true, data: [...], posts: [...]}
+        // api.getPosts() should return the posts array directly after transformation
+        // But handle both cases for safety
         const postsArray = Array.isArray(backendPosts) 
           ? backendPosts 
-          : backendPosts.posts || backendPosts.data || []
+          : (backendPosts?.posts || backendPosts?.data || [])
         
         // Transform backend posts to frontend Post format
         const transformedPosts: Post[] = postsArray.map((p: any) => ({

@@ -32,11 +32,21 @@ class ApiService {
     }
 
     // Handle different response formats
-    // Check for nested data.user structure first (backend returns data: { user: {...} })
+    // For content.php?action=list, backend returns: {success: true, data: [...], posts: [...]}
+    // Check data.posts first (explicit posts array)
+    if (data.posts !== undefined && Array.isArray(data.posts)) {
+      return data.posts as T
+    }
+    // Check data.data if it's an array (for list endpoints)
+    if (data.data !== undefined && Array.isArray(data.data)) {
+      return data.data as T
+    }
+    // Check for nested data.user structure (backend returns data: { user: {...} })
     if (data.data?.user !== undefined) {
       return data.data.user as T
     }
-    if (data.data !== undefined) {
+    // Check for single data object
+    if (data.data !== undefined && !Array.isArray(data.data)) {
       return data.data as T
     }
     if (data.user !== undefined) {
@@ -44,13 +54,6 @@ class ApiService {
     }
     if (data.post !== undefined) {
       return data.post as T
-    }
-    if (data.posts !== undefined) {
-      return data.posts as T
-    }
-    // For content.php?action=list, check data.data first
-    if (data.data && Array.isArray(data.data)) {
-      return data.data as T
     }
     
     return data as T

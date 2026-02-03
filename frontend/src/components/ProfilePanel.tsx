@@ -48,7 +48,7 @@ export function ProfilePanel({ user, currentUser, onUserUpdate }: ProfilePanelPr
         const backendPosts = await api.getPosts({ limit: 100 })
         const postsArray = Array.isArray(backendPosts) 
           ? backendPosts 
-          : backendPosts.posts || backendPosts.data || []
+          : (backendPosts?.posts || backendPosts?.data || [])
         
         const transformedPosts: Post[] = postsArray.map((p: any) => ({
           id: String(p.id),
