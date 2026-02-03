@@ -32,6 +32,10 @@ class ApiService {
     }
 
     // Handle different response formats
+    // Check for nested data.user structure first (backend returns data: { user: {...} })
+    if (data.data?.user !== undefined) {
+      return data.data.user as T
+    }
     if (data.data !== undefined) {
       return data.data as T
     }
@@ -57,7 +61,7 @@ class ApiService {
     party: string
     bio?: string
   }) {
-    const response = await this.request<{ user: any }>(
+    const response = await this.request<any>(
       '/auth.php?action=signup',
       {
         method: 'POST',
@@ -71,18 +75,20 @@ class ApiService {
         }),
       }
     )
-    return response.user || response
+    // Response is already the user object after request() processing
+    return response
   }
 
   async login(email: string, password: string) {
-    const response = await this.request<{ user: any }>(
+    const response = await this.request<any>(
       '/auth.php?action=login',
       {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       }
     )
-    return response.user || response
+    // Response is already the user object after request() processing
+    return response
   }
 
   async logout() {
@@ -90,8 +96,9 @@ class ApiService {
   }
 
   async getCurrentUser() {
-    const response = await this.request<{ user: any }>('/auth.php?action=me')
-    return response.user || response
+    const response = await this.request<any>('/auth.php?action=me')
+    // Response is already the user object after request() processing
+    return response
   }
 
   // Content endpoints

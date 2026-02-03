@@ -1,12 +1,15 @@
 # Enable rewrite engine
 RewriteEngine On
 
+# Allow backend PHP files to be served directly
+RewriteCond %{REQUEST_URI} ^/backend/
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
 # If the requested file or directory exists, serve it
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 
-# If it's an API request (backend), don't rewrite
-RewriteCond %{REQUEST_URI} !^/backend/
 # If it's a file with extension, don't rewrite
 RewriteCond %{REQUEST_URI} !\.[^/]+$
 

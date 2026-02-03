@@ -1,4 +1,10 @@
 RewriteEngine On
+
+# Allow direct access to PHP files
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+# API routing (if using /api/ prefix)
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^api/(.*)$ $1.php [QSA,L]
