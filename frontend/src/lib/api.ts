@@ -23,11 +23,35 @@ class ApiService {
         ...options.headers,
       },
       credentials: 'include', // Important for session cookies
+      mode: 'cors', // Explicitly set CORS mode
+    })
+    
+    // Debug: Log request details
+    console.log('API Request:', {
+      url,
+      method: options.method || 'GET',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      }
     })
 
     const data = await response.json()
+    
+    // Debug: Log response details
+    console.log('API Response:', {
+      url,
+      status: response.status,
+      ok: response.ok,
+      success: data.success,
+      error: data.error,
+      hasData: !!data.data,
+      dataType: data.data ? (Array.isArray(data.data) ? `Array(${data.data.length})` : typeof data.data) : 'None'
+    })
 
     if (!response.ok || !data.success) {
+      console.error('API Error:', data.error || data.message || 'Request failed')
       throw new Error(data.error || data.message || 'Request failed')
     }
 

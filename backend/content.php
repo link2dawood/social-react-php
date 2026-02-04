@@ -2,7 +2,38 @@
 require_once 'db.php';
 require_once 'config.php';
 
+// Configure session BEFORE starting it
+if (php_sapi_name() !== 'cli') {
+    // Set session cookie parameters to work with CORS
+    ini_set('session.cookie_httponly', '0'); // Allow JavaScript access for debugging
+    ini_set('session.cookie_samesite', 'Lax'); // Use Lax instead of None for better compatibility
+    ini_set('session.cookie_secure', '0'); // Set to 1 in production with HTTPS
+    ini_set('session.use_only_cookies', '1');
+    ini_set('session.cookie_path', '/');
+    ini_set('session.cookie_domain', ''); // Empty for current domain
+    // Ensure session is saved to a writable directory
+    if (!ini_get('session.save_path')) {
+        ini_set('session.save_path', '/tmp');
+    }
+}
+
+// Start session
 session_start();
+
+// Debug: Log session info for create action
+if (php_sapi_name() !== 'cli' && ($_GET['action'] ?? '') === 'create') {
+    error_log('Content.php CREATE - Session ID: ' . session_id());
+    error_log('Content.php CREATE - Session name: ' . session_name());
+    error_log('Content.php CREATE - Cookies received: ' . json_encode($_COOKIE));
+    error_log('Content.php CREATE - Session data: ' . json_encode($_SESSION));
+    error_log('Content.php CREATE - Request headers: ' . json_encode(getallheaders()));
+    
+    // Try to regenerate session if empty but cookie exists
+    if (empty($_SESSION) && isset($_COOKIE[session_name()])) {
+        error_log('Content.php CREATE - Session empty but cookie exists, trying to restore...');
+        // Session might be in a different storage, try to read it
+    }
+}
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';

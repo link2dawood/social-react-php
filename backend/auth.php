@@ -50,7 +50,31 @@ if (php_sapi_name() !== 'cli' && isset($_SERVER['REQUEST_METHOD'])) {
     }
 }
 
+// Configure session cookie BEFORE starting session
+if (php_sapi_name() !== 'cli') {
+    ini_set('session.cookie_httponly', '0'); // Allow JS access for debugging
+    ini_set('session.cookie_samesite', 'Lax');
+    ini_set('session.cookie_secure', '0');
+    ini_set('session.use_only_cookies', '1');
+    ini_set('session.cookie_path', '/');
+    ini_set('session.cookie_domain', '');
+}
+
 session_start();
+
+// Ensure session cookie is set with proper parameters
+if (php_sapi_name() !== 'cli' && !isset($_COOKIE[session_name()])) {
+    $params = session_get_cookie_params();
+    setcookie(
+        session_name(),
+        session_id(),
+        $params['lifetime'] ? time() + $params['lifetime'] : 0,
+        $params['path'],
+        $params['domain'],
+        $params['secure'],
+        $params['httponly']
+    );
+}
 
 $method = $_SERVER['REQUEST_METHOD'];
 $data = json_decode(file_get_contents("php://input"), true);
@@ -132,6 +156,34 @@ try {
             }
             
             $_SESSION['user_id'] = $user['id'];
+            $_SESSION['user_email'] = $user['email'];
+            $_SESSION['user_username'] = $user['username'];
+            
+            // Regenerate session ID for security (automatically copies session data)
+            $oldSessionId = session_id();
+            session_regenerate_id(true);
+            $newSessionId = session_id();
+            
+            // Explicitly set cookie with the NEW session ID
+            $cookieName = session_name();
+            
+            // Use setcookie() with explicit parameters - MUST be called after regenerate
+            setcookie($cookieName, $newSessionId, [
+                'expires' => 0, // Session cookie (expires when browser closes)
+                'path' => '/',
+                'domain' => '',
+                'secure' => false,
+                'httponly' => false,
+                'samesite' => 'Lax'
+            ]);
+            
+            // Debug: Log session info
+            error_log('Login - Old Session ID: ' . $oldSessionId);
+            error_log('Login - New Session ID: ' . $newSessionId);
+            error_log('Login - User ID set in session: ' . $user['id']);
+            error_log('Login - Session data: ' . json_encode($_SESSION));
+            error_log('Login - Cookie set: ' . $cookieName . '=' . $newSessionId);
+            error_log('Login - Cookie params: ' . json_encode(session_get_cookie_params()));
             
             // Get follower/following counts and IDs
             $followersStmt = $db->prepare("SELECT COUNT(*) as count FROM follows WHERE following_id = ?");
@@ -197,7 +249,15 @@ try {
             break;
             
         case 'me':
+            // Debug: Log session info
+            error_log('Auth.php ME - Session ID: ' . session_id());
+            error_log('Auth.php ME - Session name: ' . session_name());
+            error_log('Auth.php ME - Cookies received: ' . json_encode($_COOKIE));
+            error_log('Auth.php ME - Session data: ' . json_encode($_SESSION));
+            error_log('Auth.php ME - User ID in session: ' . (isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'NOT SET'));
+            
             if (!isset($_SESSION['user_id'])) {
+                error_log('Auth.php ME - Authentication failed: No user_id in session');
                 throw new Exception('Not authenticated');
             }
             
