@@ -1,0 +1,694 @@
+openapi: 3.0.3
+info:
+  title: Lerumos Social Media Platform API
+  description: |
+    Backend API for the Lerumos Social Media Platform.
+    
+    ## Authentication
+    Most endpoints require session-based authentication. Use the `/auth.php?action=login` endpoint to authenticate.
+    
+    ## Response Format
+    All endpoints return JSON in this format:
+    ```json
+    {
+      "success": true|false,
+      "data": {...},
+      "error": "error message if failed",
+      "message": "success message"
+    }
+    ```
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: admin@example.com
+
+servers:
+  - url: http://localhost:8000
+    description: Development server
+  - url: http://localhost:8080/backend
+    description: Docker development server
+
+tags:
+  - name: Authentication
+    description: User authentication and session management
+  - name: Content
+    description: Post creation, listing, and interactions
+  - name: Social
+    description: Follow/unfollow and social connections
+  - name: Messages
+    description: Direct messaging between users
+  - name: Search
+    description: Search for users, posts, and hashtags
+  - name: Upload
+    description: File upload functionality
+  - name: Payments
+    description: Payment processing
+  - name: Analytics
+    description: User analytics and tracking
+  - name: Admin
+    description: Administrative functions (requires admin role)
+
+paths:
+  /auth.php:
+    post:
+      tags:
+        - Authentication
+      summary: Authentication actions
+      description: Handle signup, login, and logout
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [signup, login, logout]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/SignupRequest'
+                - $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags:
+        - Authentication
+      summary: Get current user
+      description: Get currently authenticated user's profile
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [me]
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /content.php:
+    get:
+      tags:
+        - Content
+      summary: List or get posts
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [list, get]
+        - name: id
+          in: query
+          description: Post ID (required for 'get' action)
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          description: Number of posts to return (for 'list' action)
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          description: Offset for pagination (for 'list' action)
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Posts retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostsResponse'
+    post:
+      tags:
+        - Content
+      summary: Create post, like, or comment
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [create, like, comment]
+        - name: id
+          in: query
+          description: Post ID (required for 'like' and 'comment' actions)
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/CreatePostRequest'
+                - $ref: '#/components/schemas/CommentRequest'
+      responses:
+        '200':
+          description: Action successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /social.php:
+    get:
+      tags:
+        - Social
+      summary: Get followers or following
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [followers, following]
+        - name: user_id
+          in: query
+          description: User ID (optional, defaults to current user)
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsersListResponse'
+    post:
+      tags:
+        - Social
+      summary: Follow or unfollow a user
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [follow, unfollow]
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Action successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /messages.php:
+    get:
+      tags:
+        - Messages
+      summary: List messages
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [list]
+        - name: user_id
+          in: query
+          description: Filter by specific user
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Messages retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessagesResponse'
+    post:
+      tags:
+        - Messages
+      summary: Send message or mark as read
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [send, mark_read]
+        - name: id
+          in: query
+          description: Message ID (required for 'mark_read')
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '200':
+          description: Action successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /search.php:
+    get:
+      tags:
+        - Search
+      summary: Search for users, posts, or hashtags
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: Filter by type
+          schema:
+            type: string
+            enum: [user, post, hashtag]
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+
+  /upload.php:
+    post:
+      tags:
+        - Upload
+      summary: Upload a file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: File uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+
+  /payments.php:
+    post:
+      tags:
+        - Payments
+      summary: Process a payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '200':
+          description: Payment processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /analytics.php:
+    get:
+      tags:
+        - Analytics
+      summary: Get analytics stats
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [stats]
+      responses:
+        '200':
+          description: Analytics statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+    post:
+      tags:
+        - Analytics
+      summary: Track an event
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [track]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                event:
+                  type: string
+                metadata:
+                  type: object
+      responses:
+        '200':
+          description: Event tracked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /admin.php:
+    get:
+      tags:
+        - Admin
+      summary: Get admin statistics
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [stats]
+      responses:
+        '200':
+          description: Platform statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+    post:
+      tags:
+        - Admin
+      summary: Delete user or post
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [delete_user, delete_post]
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Deletion successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+components:
+  schemas:
+    SignupRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+        username:
+          type: string
+        displayName:
+          type: string
+        name:
+          type: string
+        party:
+          type: string
+          default: independent
+        bio:
+          type: string
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    CreatePostRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+        media_url:
+          type: string
+        media_type:
+          type: string
+        type:
+          type: string
+        party:
+          type: string
+
+    CommentRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+
+    SendMessageRequest:
+      type: object
+      required:
+        - user_id
+        - content
+      properties:
+        user_id:
+          type: integer
+        content:
+          type: string
+
+    PaymentRequest:
+      type: object
+      required:
+        - amount
+        - payment_method
+      properties:
+        amount:
+          type: number
+          format: float
+        payment_method:
+          type: string
+        description:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        displayName:
+          type: string
+        username:
+          type: string
+        avatar:
+          type: string
+        bio:
+          type: string
+        party:
+          type: string
+        followerCount:
+          type: integer
+        followers:
+          type: array
+          items:
+            type: string
+        following:
+          type: array
+          items:
+            type: string
+        friends:
+          type: array
+          items:
+            type: string
+        earnings:
+          type: number
+        totalTips:
+          type: number
+        tokens:
+          type: number
+        impressions:
+          type: integer
+        isVerified:
+          type: boolean
+        joinDate:
+          type: string
+          format: date-time
+
+    Post:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        content:
+          type: string
+        media_url:
+          type: string
+        media_type:
+          type: string
+        type:
+          type: string
+        party:
+          type: string
+        likes_count:
+          type: integer
+        comments_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    AuthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+            user_id:
+              type: integer
+
+    UserResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+
+    PostsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Post'
+
+    UsersListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+
+    MessagesResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            type: object
+
+    SearchResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            type: object
+
+    UploadResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            url:
+              type: string
+            filename:
+              type: string
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          type: object
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string

@@ -1,48 +1,64 @@
 <?php
-// db.php already sets CORS headers, but ensure they're set before session_start()
-require_once 'db.php';
+// Load config first to get CORS settings
 require_once 'config.php';
+require_once 'db.php';
 
-// Ensure CORS headers are properly set (db.php should have already set them)
+// Set CORS headers BEFORE session_start() and NEVER use wildcard with credentials
 if (php_sapi_name() !== 'cli' && isset($_SERVER['REQUEST_METHOD'])) {
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? $_SERVER['HTTP_REFERER'] ?? null;
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? null;
     
+    // Extract origin from referer if HTTP_ORIGIN is not set
     if (!$origin && isset($_SERVER['HTTP_REFERER'])) {
         $referer = $_SERVER['HTTP_REFERER'];
         $parsed = parse_url($referer);
         if ($parsed) {
             $origin = $parsed['scheme'] . '://' . $parsed['host'];
-            if (isset($parsed['port'])) {
+            if (isset($parsed['port']) && !in_array($parsed['port'], [80, 443])) {
                 $origin .= ':' . $parsed['port'];
             }
         }
     }
     
-    if ($origin && $origin !== '*') {
+    // Normalize origin
+    if ($origin) {
         $origin = rtrim($origin, '/');
-        if (strpos($origin, '127.0.0.1') !== false) {
-            $originLocalhost = str_replace('127.0.0.1', 'localhost', $origin);
-            if (defined('CORS_ALLOWED_ORIGINS') && in_array($originLocalhost, CORS_ALLOWED_ORIGINS)) {
-                $origin = $originLocalhost;
+    }
+    
+    // CRITICAL: When using credentials, we MUST set a specific origin, never '*'
+    $allowedOrigin = null;
+    if ($origin && defined('CORS_ALLOWED_ORIGINS')) {
+        // Check if origin is in allowed list
+        if (in_array($origin, CORS_ALLOWED_ORIGINS)) {
+            $allowedOrigin = $origin;
+        } else {
+            // Try localhost/127.0.0.1 variants
+            if (strpos($origin, '127.0.0.1') !== false) {
+                $originLocalhost = str_replace('127.0.0.1', 'localhost', $origin);
+                if (in_array($originLocalhost, CORS_ALLOWED_ORIGINS)) {
+                    $allowedOrigin = $origin;
+                }
             }
-        }
-        if (strpos($origin, 'localhost') !== false) {
-            $origin127 = str_replace('localhost', '127.0.0.1', $origin);
-            if (defined('CORS_ALLOWED_ORIGINS') && in_array($origin127, CORS_ALLOWED_ORIGINS)) {
-                $origin = $origin127;
+            if (strpos($origin, 'localhost') !== false) {
+                $origin127 = str_replace('localhost', '127.0.0.1', $origin);
+                if (in_array($origin127, CORS_ALLOWED_ORIGINS)) {
+                    $allowedOrigin = $origin;
+                }
             }
         }
     }
     
-    if ($origin && defined('CORS_ALLOWED_ORIGINS') && (in_array($origin, CORS_ALLOWED_ORIGINS) || in_array('*', CORS_ALLOWED_ORIGINS))) {
-        header("Access-Control-Allow-Origin: $origin", true);
+    // Set the specific origin (never wildcard when using credentials)
+    if ($allowedOrigin) {
+        header("Access-Control-Allow-Origin: $allowedOrigin");
     } else {
-        header("Access-Control-Allow-Origin: *", true);
+        // Development fallback - allow the requesting origin
+        header("Access-Control-Allow-Origin: " . ($origin ?: 'http://localhost:5000'));
     }
     
     header("Access-Control-Allow-Methods: " . (defined('CORS_ALLOWED_METHODS') ? CORS_ALLOWED_METHODS : 'GET,POST,PUT,DELETE,OPTIONS'));
     header("Access-Control-Allow-Headers: " . (defined('CORS_ALLOWED_HEADERS') ? CORS_ALLOWED_HEADERS : 'Content-Type,Authorization,X-Requested-With'));
     header("Access-Control-Allow-Credentials: true");
+    header("Content-Type: application/json");
     
     if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
         http_response_code(200);

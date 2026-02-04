@@ -15,7 +15,7 @@ class ApiService {
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`
-    
+
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -79,7 +79,7 @@ class ApiService {
     if (data.post !== undefined) {
       return data.post as T
     }
-    
+
     return data as T
   }
 
@@ -137,7 +137,7 @@ class ApiService {
     const query = new URLSearchParams()
     if (params?.limit) query.append('limit', params.limit.toString())
     if (params?.offset) query.append('offset', params.offset.toString())
-    
+
     return this.request<any[]>(
       `/content.php?action=list${query.toString() ? '&' + query.toString() : ''}`
     )
@@ -187,14 +187,14 @@ class ApiService {
   }
 
   async getFollowers(userId?: number) {
-    const url = userId 
+    const url = userId
       ? `/social.php?action=followers&user_id=${userId}`
       : `/social.php?action=followers`
     return this.request<any[]>(url)
   }
 
   async getFollowing(userId?: number) {
-    const url = userId 
+    const url = userId
       ? `/social.php?action=following&user_id=${userId}`
       : `/social.php?action=following`
     return this.request<any[]>(url)
@@ -276,8 +276,16 @@ class ApiService {
   }
 
   async isSetupComplete() {
-    const response = await this.request<{ isSetupComplete: boolean }>('/settings.php?action=isSetupComplete')
-    return response.isSetupComplete || false
+    try {
+      const response = await this.request<{ isSetupComplete: boolean }>('/settings.php?action=isSetupComplete')
+      // Backend returns: { success: true, data: { isSetupComplete: boolean } }
+      // The request method already extracts data.isSetupComplete for us
+      return response.isSetupComplete || false
+    } catch (error) {
+      // If API fails, assume setup is not complete
+      console.error('Failed to check setup status:', error)
+      return false
+    }
   }
 }
 

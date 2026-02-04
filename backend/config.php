@@ -14,7 +14,7 @@ define('PRIMARY_APP_TYPE', 'social-media');
 
 // Database Configuration
 define('DB_TYPE', Env::get('DB_TYPE', 'sqlite'));
-define('DB_PATH', Env::get('DB_PATH', 'backend/database.db'));
+define('DB_PATH', Env::get('DB_PATH', 'database.db'));
 
 // File Upload Configuration
 define('UPLOAD_DIR', Env::get('UPLOAD_DIR', 'uploads/'));
@@ -31,7 +31,7 @@ define('SECRET_KEY', Env::get('SECRET_KEY', 'change-this-in-production'));
 define('JWT_SECRET', Env::get('JWT_SECRET', 'change-this-in-production'));
 
 // CORS Configuration
-$corsOrigins = Env::get('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000');
+$corsOrigins = Env::get('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000,http://localhost:5000');
 $corsOriginsArray = array_map('trim', explode(',', $corsOrigins));
 // Add both localhost and 127.0.0.1 variants for each port
 $expandedOrigins = [];
@@ -44,6 +44,13 @@ foreach ($corsOriginsArray as $origin) {
     // Add 127.0.0.1 variant if localhost
     if (strpos($origin, 'localhost') !== false) {
         $expandedOrigins[] = str_replace('localhost', '127.0.0.1', $origin);
+    }
+}
+// Ensure common development ports are included
+$commonPorts = ['http://localhost:5000', 'http://127.0.0.1:5000', 'http://localhost:8000', 'http://127.0.0.1:8000'];
+foreach ($commonPorts as $port) {
+    if (!in_array($port, $expandedOrigins)) {
+        $expandedOrigins[] = $port;
     }
 }
 define('CORS_ALLOWED_ORIGINS', array_unique($expandedOrigins));

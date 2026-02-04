@@ -17,7 +17,7 @@ class Env {
         }
 
         if ($path === null) {
-            $path = dirname(__DIR__) . '/.env';
+            $path = __DIR__ . '/.env';
         }
 
         if (!file_exists($path)) {

@@ -1,25 +1,31 @@
 <?php
 // Set basic CORS headers EARLY (before config loads) to handle OPTIONS requests immediately
 if (php_sapi_name() !== 'cli' && isset($_SERVER['REQUEST_METHOD'])) {
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? $_SERVER['HTTP_REFERER'] ?? '*';
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? null;
     
-    // Extract origin from referer if needed
-    if ($origin === '*' && isset($_SERVER['HTTP_REFERER'])) {
+    // Extract origin from referer if HTTP_ORIGIN is not set
+    if (!$origin && isset($_SERVER['HTTP_REFERER'])) {
         $referer = $_SERVER['HTTP_REFERER'];
         $parsed = parse_url($referer);
         if ($parsed) {
             $origin = $parsed['scheme'] . '://' . $parsed['host'];
-            if (isset($parsed['port'])) {
+            if (isset($parsed['port']) && !in_array($parsed['port'], [80, 443])) {
                 $origin .= ':' . $parsed['port'];
             }
         }
     }
     
-    // Set basic CORS headers early (will be refined after config loads)
-    if ($origin && $origin !== '*') {
+    // Normalize origin
+    if ($origin) {
+        $origin = rtrim($origin, '/');
+    }
+    
+    // CRITICAL: Never use wildcard with credentials - always set specific origin
+    if ($origin) {
         header("Access-Control-Allow-Origin: $origin");
     } else {
-        header("Access-Control-Allow-Origin: *");
+        // Fallback to common development origin
+        header("Access-Control-Allow-Origin: http://localhost:5000");
     }
     header("Access-Control-Allow-Methods: GET,POST,PUT,DELETE,OPTIONS");
     header("Access-Control-Allow-Headers: Content-Type,Authorization,X-Requested-With");
@@ -105,12 +111,15 @@ if (php_sapi_name() !== 'cli' && isset($_SERVER['REQUEST_METHOD'])) {
         }
     }
     
-    // Set CORS headers
+    // Set CORS headers - NEVER use wildcard with credentials
     if ($origin && (in_array($origin, CORS_ALLOWED_ORIGINS) || in_array('*', CORS_ALLOWED_ORIGINS))) {
         header("Access-Control-Allow-Origin: $origin");
+    } elseif ($origin) {
+        // Development: allow the requesting origin
+        header("Access-Control-Allow-Origin: $origin");
     } else {
-        // Default to allow all origins if not in list
-        header("Access-Control-Allow-Origin: *");
+        // Fallback to common development origin
+        header("Access-Control-Allow-Origin: http://localhost:5000");
     }
 
     header("Content-Type: application/json");
