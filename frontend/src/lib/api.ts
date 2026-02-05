@@ -163,3 +163,39 @@ export async function createPost(payload: {
   });
 }
 
+// 📤 File Upload ------------------------------------------------------------
+
+export async function uploadFile(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(`${BASE_URL}/upload.php`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  const json = await res.json();
+
+  if (!json.success) {
+    throw new Error(json.error || 'Upload failed');
+  }
+
+  return {
+    file_url: json.file_url,
+    media_type: json.media_type,
+    post_id: json.post_id
+  };
+}
+
+// Export api object for convenience
+export const api = {
+  signup,
+  login,
+  logout,
+  getCurrentUser,
+  getPosts,
+  getPost,
+  createPost,
+  uploadFile,
+};

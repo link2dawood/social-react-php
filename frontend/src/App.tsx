@@ -75,6 +75,8 @@ export interface Post {
   content: string
   image?: string
   video?: string
+  mediaUrl?: string
+  mediaType?: string
   type: 'post' | 'meme'
   party: PoliticalParty
   timestamp: string
@@ -168,7 +170,7 @@ function App() {
 
   const handleUserUpdate = (updatedUser: User) => {
     setCurrentUser(updatedUser)
-    const updatedUsers = users?.map(u => 
+    const updatedUsers = users?.map(u =>
       u.id === updatedUser.id ? updatedUser : u
     ) || []
     setUsers(updatedUsers)
@@ -204,8 +206,8 @@ function App() {
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 p-4 flex-1">
         {/* Sidebar */}
         <div className="lg:col-span-3">
-          <Sidebar 
-            user={currentUser} 
+          <Sidebar
+            user={currentUser}
             currentView={currentView}
             onViewChange={(view) => setCurrentView(view)}
           />
@@ -220,8 +222,8 @@ function App() {
           {currentView === 'parties' && <PartiesFeed user={currentUser} />}
           {currentView === 'messages' && <MessagesPanel user={currentUser} />}
           {currentView === 'profile' && (
-            <ProfilePanel 
-              user={viewingUserId ? users?.find(u => u.id === viewingUserId) || currentUser : currentUser} 
+            <ProfilePanel
+              user={viewingUserId ? users?.find(u => u.id === viewingUserId) || currentUser : currentUser}
               currentUser={currentUser}
               onUserUpdate={handleUserUpdate}
             />
