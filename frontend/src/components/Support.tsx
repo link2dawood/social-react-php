@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import { useKV } from '@github/spark/hooks'
+import { useKV } from '@/hooks/use-kv'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { User, Post } from '@/App'
-import { Question, Warning, ChatCircle, FileText } from '@phosphor-icons/react'
+import { Question, Warning, ChatCircle, FileText, Image as ImageIcon, X } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 interface Report {
@@ -15,10 +16,12 @@ interface Report {
   reporterId: string
   reportedUserId?: string
   reportedPostId?: string
+  reportedPageUrl?: string
   reason: string
   description: string
+  attachments?: string[]
   timestamp: string
-  status: 'pending' | 'resolved'
+  status: 'pending' | 'resolved' | 'investigating'
 }
 
 interface SupportTicket {
@@ -26,8 +29,9 @@ interface SupportTicket {
   userId: string
   subject: string
   message: string
+  attachments?: string[]
   timestamp: string
-  status: 'open' | 'closed'
+  status: 'open' | 'in-progress' | 'closed'
 }
 
 interface SupportProps {

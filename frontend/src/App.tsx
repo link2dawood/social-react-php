@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react'
-import { useKV } from '@github/spark/hooks'
-import api from '@/lib/api'
+import { useState } from 'react'
+import { useKV } from '@/hooks/use-kv'
 import { Sidebar } from '@/components/Sidebar'
 import { MainFeed } from '@/components/MainFeed'
 import { RightPanel } from '@/components/RightPanel'
@@ -8,9 +7,7 @@ import { AuthModal } from '@/components/AuthModal'
 import { MessagesPanel } from '@/components/MessagesPanel'
 import { MemeWall } from '@/components/MemeWall'
 import { ProfilePanel } from '@/components/ProfilePanel'
-import { AdsManager } from '@/components/AdsManager'
 import { HashtagFeed } from '@/components/HashtagFeed'
-import { TopAdsDisplay } from '@/components/TopAdsDisplay'
 import { DataSeeder } from '@/components/DataSeeder'
 import { SetupWizard } from '@/components/SetupWizard'
 import { AdminPanel } from '@/components/AdminPanel'
@@ -20,6 +17,8 @@ import { NotificationsPanel } from '@/components/NotificationsPanel'
 import { Footer } from '@/components/Footer'
 import { CookieConsent } from '@/components/CookieConsent'
 import { SearchPanel } from '@/components/SearchPanel'
+import { PartiesFeed } from '@/components/PartiesFeed'
+import { PoliticsStars } from '@/components/PoliticsStars'
 import { Toaster } from '@/components/ui/sonner'
 
 export type PoliticalParty = 'democrat' | 'republican' | 'independent'
@@ -59,9 +58,15 @@ export interface User {
     slotIndex: number
     userId: string
     expiresAt: string
+    scheduledDate: string
     rate: number
   }[]
   suggestedFollowsRate?: number
+  isPoliticsStarMember?: boolean
+  politicsStarExpiresAt?: string
+  autoFollow?: boolean
+  inAutoFollowProgram?: boolean
+  videoCount?: number
 }
 
 export interface Post {
@@ -77,7 +82,7 @@ export interface Post {
   comments: { id: string; userId: string; content: string; timestamp: string }[]
   tips: { userId: string; amount: number; timestamp: string }[]
   shares: number
-  reports?: { userId: string; reason: string; timestamp: string }[]
+  reports?: { userId: string; reason: string; timestamp: string; proofVideo?: string }[]
 }
 
 export interface TrendingTopic {
@@ -126,6 +131,8 @@ export interface SiteSettings {
   }
   siteFunds: number
   isSetupComplete: boolean
+  videoRoyaltiesEnabled?: boolean
+  videoRoyaltyPercentage?: number
   footerPages?: {
     name: string
     url: string
@@ -137,7 +144,7 @@ export interface SiteSettings {
 function App() {
   const [currentUser, setCurrentUser] = useKV<User | null>('currentUser', null)
   const [users, setUsers] = useKV<User[]>('users', [])
-  const [siteSettings, setSiteSettings] = useKV<SiteSettings | undefined>('siteSettings', {
+  const [siteSettings] = useKV<SiteSettings | undefined>('siteSettings', {
     ageRestriction: 18,
     termsAndConditions: '',
     privacyPolicy: '',
@@ -154,164 +161,10 @@ function App() {
     siteFunds: 0,
     isSetupComplete: false
   })
-  const [currentView, setCurrentView] = useState<'feed' | 'memes' | 'messages' | 'profile' | 'ads' | 'hashtags' | 'admin' | 'settings' | 'support' | 'search'>('feed')
-  const [showAuthModal, setShowAuthModal] = useState(false)
-  const [showSetupWizard, setShowSetupWizard] = useState(false)
-  
-  // Check setup completion from database on mount
-  useEffect(() => {
-    const checkSetup = async () => {
-      // Don't show wizard if user is logged in
-      if (currentUser) {
-        setShowSetupWizard(false)
-        return
-      }
-      
-      try {
-        // Check database first
-        const isComplete = await api.isSetupComplete()
-        if (isComplete) {
-          // Setup is complete in database
-          setShowSetupWizard(false)
-          // Update localStorage to match database
-          if (siteSettings && !siteSettings.isSetupComplete) {
-            setSiteSettings({ ...siteSettings, isSetupComplete: true })
-          }
-        } else {
-          // Setup not complete, show wizard
-          setShowSetupWizard(true)
-        }
-      } catch (error) {
-        // If API fails, fall back to localStorage check
-        console.log('Failed to check setup status from database, using localStorage')
-        if (siteSettings && siteSettings.isSetupComplete === false) {
-          setShowSetupWizard(true)
-        } else {
-          setShowSetupWizard(false)
-        }
-      }
-    }
-    checkSetup()
-  }, [currentUser]) // Only re-check when currentUser changes
+  const [currentView, setCurrentView] = useState<'feed' | 'memes' | 'messages' | 'profile' | 'hashtags' | 'admin' | 'settings' | 'support' | 'search' | 'parties' | 'politics-stars'>('feed')
+  const [showAuthModal, setShowAuthModal] = useState(!currentUser)
+  const [showSetupWizard, setShowSetupWizard] = useState(!(siteSettings?.isSetupComplete))
   const [viewingUserId, setViewingUserId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  // Load current user from API on mount
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        // First check localStorage for user (in case of recent login/signup)
-        // Check both possible key formats that useKV might use
-        let storedUser = null
-        const possibleKeys = ['@github/spark:currentUser', 'currentUser', 'kv:currentUser']
-        for (const key of possibleKeys) {
-          const stored = localStorage.getItem(key)
-          if (stored) {
-            try {
-              const parsed = JSON.parse(stored)
-              if (parsed && parsed.id) {
-                storedUser = parsed
-                break
-              }
-            } catch (e) {
-              // Try next key
-            }
-          }
-        }
-        
-        if (storedUser) {
-          // User exists in localStorage, set it and verify with API
-          setCurrentUser(storedUser)
-          setCurrentView('feed')
-          setLoading(false)
-          
-          // Verify session with API in background
-          try {
-            const userData = await api.getCurrentUser()
-            if (userData) {
-              const user: User = {
-                id: String(userData.id),
-                username: userData.username || '',
-                displayName: userData.displayName || userData.name || '',
-                party: (userData.party || 'independent') as PoliticalParty,
-                bio: userData.bio,
-                avatar: userData.avatar,
-                followers: userData.followers || [],
-                following: userData.following || [],
-                friends: userData.friends || [],
-                earnings: userData.earnings || 0,
-                totalTips: userData.totalTips || 0,
-                joinDate: userData.joinDate || new Date().toISOString(),
-                followerCount: userData.followerCount || 0,
-                impressions: userData.impressions || 0,
-                tokens: userData.tokens || 0,
-                isVerified: userData.isVerified || false
-              }
-              setCurrentUser(user)
-              // Ensure feed view is set after API verification
-              setCurrentView('feed')
-            }
-          } catch (apiError) {
-            // API verification failed, but keep localStorage user
-            console.log('API verification failed, using localStorage user')
-            // Still ensure feed view is set
-            setCurrentView('feed')
-            // Ensure loading is false so dashboard shows
-            setLoading(false)
-          }
-          return
-        }
-        
-        // No user in localStorage, try API
-        const userData = await api.getCurrentUser()
-        if (userData) {
-          const user: User = {
-            id: String(userData.id),
-            username: userData.username || '',
-            displayName: userData.displayName || userData.name || '',
-            party: (userData.party || 'independent') as PoliticalParty,
-            bio: userData.bio,
-            avatar: userData.avatar,
-            followers: userData.followers || [],
-            following: userData.following || [],
-            friends: userData.friends || [],
-            earnings: userData.earnings || 0,
-            totalTips: userData.totalTips || 0,
-            joinDate: userData.joinDate || new Date().toISOString(),
-            followerCount: userData.followerCount || 0,
-            impressions: userData.impressions || 0,
-            tokens: userData.tokens || 0,
-            isVerified: userData.isVerified || false
-          }
-          setCurrentUser(user)
-          // Always set to feed view when user loads from API
-          setCurrentView('feed')
-        } else {
-          // No user found, show auth modal
-          setShowAuthModal(true)
-        }
-      } catch (error) {
-        // User not authenticated
-        setShowAuthModal(true)
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadUser()
-  }, [])
-
-  // When currentUser changes (e.g., after login), ensure we're on feed view
-  useEffect(() => {
-    if (currentUser) {
-      // Always set to feed view when user logs in
-      setCurrentView('feed')
-      // Close auth modal if it was open
-      setShowAuthModal(false)
-    } else {
-      // If no user, ensure auth modal is shown
-      setShowAuthModal(true)
-    }
-  }, [currentUser])
 
   const handleUserUpdate = (updatedUser: User) => {
     setCurrentUser(updatedUser)
@@ -330,37 +183,12 @@ function App() {
     setCurrentView('profile')
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
   if (showSetupWizard) {
-    return <SetupWizard isOpen={showSetupWizard} onComplete={() => {
-      setShowSetupWizard(false)
-      // Ensure siteSettings is updated
-      if (siteSettings) {
-        setSiteSettings({ ...siteSettings, isSetupComplete: true })
-      }
-    }} />
+    return <SetupWizard isOpen={showSetupWizard} onComplete={() => setShowSetupWizard(false)} />
   }
 
   if (!currentUser) {
-    return (
-      <AuthModal 
-        isOpen={true} 
-        onClose={() => {
-          // Modal will close when currentUser is set
-          // The useEffect will handle redirecting to feed
-        }} 
-      />
-    )
+    return <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
   }
 
   const themeClass = `theme-${currentUser.party}`
@@ -368,8 +196,7 @@ function App() {
   return (
     <div className={`min-h-screen bg-background ${themeClass} flex flex-col`}>
       <DataSeeder />
-      <TopAdsDisplay />
-      
+
       <div className="fixed top-4 right-4 z-50">
         <NotificationsPanel user={currentUser} />
       </div>
@@ -390,6 +217,7 @@ function App() {
           {currentView === 'search' && <SearchPanel user={currentUser} />}
           {currentView === 'hashtags' && <HashtagFeed user={currentUser} />}
           {currentView === 'memes' && <MemeWall user={currentUser} />}
+          {currentView === 'parties' && <PartiesFeed user={currentUser} />}
           {currentView === 'messages' && <MessagesPanel user={currentUser} />}
           {currentView === 'profile' && (
             <ProfilePanel 
@@ -398,7 +226,7 @@ function App() {
               onUserUpdate={handleUserUpdate}
             />
           )}
-          {currentView === 'ads' && <AdsManager user={currentUser} onUserUpdate={handleUserUpdate} />}
+          {currentView === 'politics-stars' && <PoliticsStars user={currentUser} onUserUpdate={handleUserUpdate} />}
           {currentView === 'admin' && <AdminPanel user={currentUser} />}
           {currentView === 'settings' && <Settings user={currentUser} onUserUpdate={handleUserUpdate} />}
           {currentView === 'support' && <Support user={currentUser} />}

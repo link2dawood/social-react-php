@@ -11,22 +11,22 @@ import {
   Building,
   Heart,
   Scales,
-  Crown,
   Hash,
   Gear,
   ShieldCheck,
   Question,
-  MagnifyingGlass
+  MagnifyingGlass,
+  VideoCamera,
+  Star
 } from '@phosphor-icons/react'
 import type { User } from '@/App'
-import { useKV } from '@github/spark/hooks'
+import { useKV } from '@/hooks/use-kv'
 import { toast } from 'sonner'
-import api from '@/lib/api'
 
 interface SidebarProps {
   user: User
-  currentView: 'feed' | 'memes' | 'messages' | 'profile' | 'ads' | 'hashtags' | 'admin' | 'settings' | 'support' | 'search'
-  onViewChange: (view: 'feed' | 'memes' | 'messages' | 'profile' | 'ads' | 'hashtags' | 'admin' | 'settings' | 'support' | 'search') => void
+  currentView: 'feed' | 'memes' | 'messages' | 'profile' | 'hashtags' | 'admin' | 'settings' | 'support' | 'search' | 'parties' | 'politics-stars'
+  onViewChange: (view: 'feed' | 'memes' | 'messages' | 'profile' | 'hashtags' | 'admin' | 'settings' | 'support' | 'search' | 'parties' | 'politics-stars') => void
 }
 
 export function Sidebar({ user, currentView, onViewChange }: SidebarProps) {
@@ -45,21 +45,8 @@ export function Sidebar({ user, currentView, onViewChange }: SidebarProps) {
   }[user.party]
 
   const handleSignOut = async () => {
-    try {
-      // Call backend logout endpoint to destroy session
-      await api.logout()
-      // Clear local user state
-      await setCurrentUser(null)
-      toast.success('Signed out successfully')
-      // Reload page to show login modal
-      window.location.reload()
-    } catch (error: any) {
-      // Even if logout fails, clear local state
-      await setCurrentUser(null)
-      toast.error(error.message || 'Logout failed, but local session cleared')
-      // Reload page to show login modal
-      window.location.reload()
-    }
+    await setCurrentUser(null)
+    toast.success('Signed out successfully')
   }
 
   const menuItems = [
@@ -67,9 +54,10 @@ export function Sidebar({ user, currentView, onViewChange }: SidebarProps) {
     { id: 'search', label: 'Search', icon: MagnifyingGlass },
     { id: 'hashtags', label: 'Hashtags', icon: Hash },
     { id: 'memes', label: 'Meme Wall', icon: Smiley },
+    { id: 'parties', label: 'Parties (Reels)', icon: VideoCamera },
     { id: 'messages', label: 'Messages', icon: ChatCircle },
     { id: 'profile', label: 'Profile', icon: UserIcon },
-    { id: 'ads', label: 'Ads Manager', icon: Crown },
+    { id: 'politics-stars', label: 'Politics Stars', icon: Star },
     { id: 'settings', label: 'Settings', icon: Gear },
     { id: 'support', label: 'Support', icon: Question },
     ...(user.isAdmin ? [{ id: 'admin' as const, label: 'Admin Panel', icon: ShieldCheck }] : [])

@@ -1,15 +1,15 @@
 import { useState } from 'react'
-import { useKV } from '@github/spark/hooks'
+import { useKV } from '@/hooks/use-kv'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Building, Heart, Scales } from '@phosphor-icons/react'
 import type { PoliticalParty, User } from '@/App'
 import { toast } from 'sonner'
-import api from '@/lib/api'
 
 interface AuthModalProps {
   isOpen: boolean
@@ -22,13 +22,11 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [step, setStep] = useState<'welcome' | 'signup' | 'login'>('welcome')
   const [formData, setFormData] = useState({
     username: '',
-    email: '',
-    password: '',
     displayName: '',
     party: 'independent' as PoliticalParty,
-    bio: ''
+    bio: '',
+    autoFollow: true
   })
-  const [loading, setLoading] = useState(false)
 
   const partyOptions = [
     { 
@@ -55,126 +53,68 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   ]
 
   const handleSignup = async () => {
-    if (!formData.username.trim() || !formData.displayName.trim() || !formData.email.trim() || !formData.password.trim()) {
+    if (!formData.username.trim() || !formData.displayName.trim()) {
       toast.error('Please fill in all required fields')
       return
     }
 
-    if (formData.password.length < 6) {
-      toast.error('Password must be at least 6 characters')
+    let users: User[] = []
+    try {
+      const raw = window.localStorage.getItem('users')
+      users = raw ? (JSON.parse(raw) as User[]) : []
+    } catch {
+      users = []
+    }
+    
+    if (users.some(u => u.username.toLowerCase() === formData.username.toLowerCase())) {
+      toast.error('Username already taken')
       return
     }
 
-    setLoading(true)
-    try {
-      const userData = await api.signup({
+    const autoFollowUsers = users.filter(u => u.inAutoFollowProgram)
+
+    const newUser: User = {
+      id: `user_${Date.now()}`,
       username: formData.username,
-        email: formData.email,
-        password: formData.password,
       displayName: formData.displayName,
       party: formData.party,
-        bio: formData.bio
-      })
-
-      // Transform backend user to frontend User format
-      const newUser: User = {
-        id: String(userData.id),
-        username: userData.username || formData.username,
-        displayName: userData.displayName || userData.name || formData.displayName,
-        party: (userData.party || formData.party) as PoliticalParty,
-        bio: userData.bio || formData.bio,
-        avatar: userData.avatar,
+      bio: formData.bio,
       followers: [],
-      following: [],
+      following: formData.autoFollow ? autoFollowUsers.map(u => u.id) : [],
       friends: [],
-        earnings: userData.earnings || 0,
-        totalTips: userData.totalTips || 0,
-        joinDate: userData.joinDate || new Date().toISOString(),
-        followerCount: userData.followerCount || 0,
-        impressions: userData.impressions || 0,
-        tokens: userData.tokens || 0,
-        isVerified: userData.isVerified || false
-      }
-
-      await setCurrentUser(newUser)
-      
-      // Also save directly to localStorage with the key that useKV uses
-      try {
-        localStorage.setItem('@github/spark:currentUser', JSON.stringify(newUser))
-        // Also save with plain key as backup
-        localStorage.setItem('currentUser', JSON.stringify(newUser))
-      } catch (e) {
-        console.error('Failed to save user to localStorage:', e)
-      }
-      
-      toast.success(`Welcome to Lerumos, ${newUser.displayName}!`)
-      
-      // Reload page to ensure state syncs properly
-      setTimeout(() => {
-        window.location.reload()
-      }, 500)
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create account')
-    } finally {
-      setLoading(false)
+      earnings: 0,
+      totalTips: 0,
+      joinDate: new Date().toISOString(),
+      followerCount: 0,
+      impressions: 0,
+      tokens: 0,
+      autoFollow: formData.autoFollow
     }
+
+    await setUsers([...users, newUser])
+    await setCurrentUser(newUser)
+    toast.success(`Welcome to Lerumos, ${newUser.displayName}!`)
+    onClose()
   }
 
   const handleLogin = async () => {
-    if (!formData.username.trim() || !formData.password.trim()) {
-      toast.error('Please enter username/email and password')
+    let users: User[] = []
+    try {
+      const raw = window.localStorage.getItem('users')
+      users = raw ? (JSON.parse(raw) as User[]) : []
+    } catch {
+      users = []
+    }
+    const user = users.find(u => u.username.toLowerCase() === formData.username.toLowerCase())
+    
+    if (!user) {
+      toast.error('User not found')
       return
     }
 
-    setLoading(true)
-    try {
-      const userData = await api.login(formData.username, formData.password)
-
-      // Transform backend user to frontend User format
-      const user: User = {
-        id: String(userData.id),
-        username: userData.username || formData.username,
-        displayName: userData.displayName || userData.name || '',
-        party: (userData.party || 'independent') as PoliticalParty,
-        bio: userData.bio,
-        avatar: userData.avatar,
-        followers: userData.followers || [],
-        following: userData.following || [],
-        friends: userData.friends || [],
-        earnings: userData.earnings || 0,
-        totalTips: userData.totalTips || 0,
-        joinDate: userData.joinDate || new Date().toISOString(),
-        followerCount: userData.followerCount || 0,
-        impressions: userData.impressions || 0,
-        tokens: userData.tokens || 0,
-        isVerified: userData.isVerified || false
-    }
-
-    // Set user state - this will trigger App.tsx to re-render
     await setCurrentUser(user)
-    
-    // Also save directly to localStorage with the key that useKV uses
-    // useKV from @github/spark/hooks uses '@github/spark:key' format
-    try {
-      localStorage.setItem('@github/spark:currentUser', JSON.stringify(user))
-      // Also save with plain key as backup
-      localStorage.setItem('currentUser', JSON.stringify(user))
-    } catch (e) {
-      console.error('Failed to save user to localStorage:', e)
-    }
-    
     toast.success(`Welcome back, ${user.displayName}!`)
-    
-    // Close modal and reload page to ensure state syncs properly
-    // This ensures App.tsx picks up the currentUser from localStorage
-    setTimeout(() => {
-      window.location.reload()
-    }, 500)
-    } catch (error: any) {
-      toast.error(error.message || 'Login failed')
-    } finally {
-      setLoading(false)
-    }
+    onClose()
   }
 
   if (step === 'welcome') {
@@ -221,19 +161,9 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             <DialogTitle className="text-xl font-bold">Join Lerumos</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-4">
-            <div>
-              <Label htmlFor="email">Email *</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                placeholder="your@email.com"
-              />
-            </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="username">Username *</Label>
+                <Label htmlFor="username">Username</Label>
                 <Input
                   id="username"
                   value={formData.username}
@@ -242,7 +172,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 />
               </div>
               <div>
-                <Label htmlFor="displayName">Display Name *</Label>
+                <Label htmlFor="displayName">Display Name</Label>
                 <Input
                   id="displayName"
                   value={formData.displayName}
@@ -250,16 +180,6 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   placeholder="Your Name"
                 />
               </div>
-            </div>
-            <div>
-              <Label htmlFor="password">Password *</Label>
-              <Input
-                id="password"
-                type="password"
-                value={formData.password}
-                onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                placeholder="At least 6 characters"
-              />
             </div>
 
             <div>
@@ -303,12 +223,23 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
               />
             </div>
 
+            <div className="flex items-center space-x-2 p-3 border rounded-lg bg-muted/30">
+              <Checkbox 
+                id="autoFollow"
+                checked={formData.autoFollow}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, autoFollow: checked as boolean }))}
+              />
+              <Label htmlFor="autoFollow" className="cursor-pointer flex-1 text-sm">
+                Automatically follow featured users (recommended for discovering popular accounts)
+              </Label>
+            </div>
+
             <div className="flex gap-2 pt-4">
-              <Button variant="outline" onClick={() => setStep('welcome')} className="flex-1" disabled={loading}>
+              <Button variant="outline" onClick={() => setStep('welcome')} className="flex-1">
                 Back
               </Button>
-              <Button onClick={handleSignup} className="flex-1" disabled={loading}>
-                {loading ? 'Creating...' : 'Create Account'}
+              <Button onClick={handleSignup} className="flex-1">
+                Create Account
               </Button>
             </div>
           </div>
@@ -325,30 +256,20 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
         </DialogHeader>
         <div className="space-y-4 pt-4">
           <div>
-            <Label htmlFor="loginUsername">Username or Email</Label>
+            <Label htmlFor="loginUsername">Username</Label>
             <Input
               id="loginUsername"
               value={formData.username}
               onChange={(e) => setFormData(prev => ({ ...prev, username: e.target.value }))}
-              placeholder="Enter your username or email"
-            />
-          </div>
-          <div>
-            <Label htmlFor="loginPassword">Password</Label>
-            <Input
-              id="loginPassword"
-              type="password"
-              value={formData.password}
-              onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-              placeholder="Enter your password"
+              placeholder="Enter your username"
             />
           </div>
           <div className="flex gap-2 pt-4">
-            <Button variant="outline" onClick={() => setStep('welcome')} className="flex-1" disabled={loading}>
+            <Button variant="outline" onClick={() => setStep('welcome')} className="flex-1">
               Back
             </Button>
-            <Button onClick={handleLogin} className="flex-1" disabled={loading}>
-              {loading ? 'Signing in...' : 'Sign In'}
+            <Button onClick={handleLogin} className="flex-1">
+              Sign In
             </Button>
           </div>
         </div>

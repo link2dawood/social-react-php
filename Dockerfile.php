@@ -19,9 +19,6 @@ RUN mkdir -p /var/www/html/backend/uploads && \
     chmod -R 755 /var/www/html && \
     chmod -R 777 /var/www/html/backend/uploads
 
-# Copy built frontend
-COPY public/ /var/www/html/
-
 # Configure Apache
 RUN echo '<VirtualHost *:80>\n\
     DocumentRoot /var/www/html\n\

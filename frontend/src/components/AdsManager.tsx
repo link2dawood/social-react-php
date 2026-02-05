@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useKV } from '@github/spark/hooks'
+import { useKV } from '@/hooks/use-kv'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,7 +14,8 @@ import { User, TrendingTopic } from '@/App'
 import { AdPurchase } from './TopAdsDisplay'
 import { VerificationManager } from './VerificationManager'
 import { SuggestedFollowsManager } from './SuggestedFollowsManager'
-import { Calendar, MapPin, Crown, CreditCard, Users, Eye, TrendUp, Hash, Download, Image as ImageIcon, TextT } from '@phosphor-icons/react'
+import { AdAnalytics } from './AdAnalytics'
+import { Calendar, MapPin, Crown, CreditCard, Users, Eye, TrendUp, Hash, Download, Image as ImageIcon, TextT, ChartLine, PencilSimple, Trash } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 const US_STATES = [
@@ -44,8 +45,9 @@ export function AdsManager({ user, onUserUpdate }: AdsManagerProps) {
   const [showCalendar, setShowCalendar] = useState(false)
   
   // Banner ad states
-  const [bannerType, setBannerType] = useState<'photo' | 'text'>('photo')
+  const [bannerType, setBannerType] = useState<'photo' | 'text' | 'video'>('photo')
   const [bannerPhoto, setBannerPhoto] = useState('')
+  const [bannerVideo, setBannerVideo] = useState('')
   const [bannerText, setBannerText] = useState('')
   const [bannerUsername, setBannerUsername] = useState('')
   
@@ -212,6 +214,7 @@ export function AdsManager({ user, onUserUpdate }: AdsManagerProps) {
         amount: price,
         bannerType,
         bannerPhoto: bannerType === 'photo' ? bannerPhoto : undefined,
+        bannerVideo: bannerType === 'video' ? bannerVideo : undefined,
         bannerText: bannerType === 'text' ? bannerText : undefined,
         bannerUsername: bannerUsername || user.username
       }
@@ -227,6 +230,7 @@ export function AdsManager({ user, onUserUpdate }: AdsManagerProps) {
       setPosition('left')
       setSelectedStates(['ALL'])
       setBannerPhoto('')
+      setBannerVideo('')
       setBannerText('')
     } catch (error) {
       toast.error('Failed to purchase ad. Please try again.')
@@ -273,6 +277,91 @@ export function AdsManager({ user, onUserUpdate }: AdsManagerProps) {
       setTrendingImage('')
     } catch (error) {
       toast.error('Failed to create trending topic')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const deleteAd = async (adId: string) => {
+    const ad = userAds?.find(a => a.id === adId)
+    if (!ad) return
+
+    const now = new Date()
+    const startDate = new Date(ad.startDate)
+    const isLive = startDate <= now
+
+    if (isLive) {
+      toast.error('Cannot delete a live ad. You can only delete ads that haven\'t started yet.')
+      return
+    }
+
+    const refundAmount = Math.floor(ad.amount * 0.85)
+    
+    const updatedActiveAds = (activeAds || []).filter(a => a.id !== adId)
+    const updatedUserAds = (userAds || []).filter(a => a.id !== adId)
+    
+    await setActiveAds(updatedActiveAds)
+    await setUserAds(updatedUserAds)
+
+    const updatedUser = { ...user, earnings: (user.earnings || 0) + refundAmount }
+    await updateUser(updatedUser)
+
+    toast.success(`Ad deleted! You received a refund of $${refundAmount} (85% of original price)`)
+  }
+
+  const [editingAd, setEditingAd] = useState<AdPurchase | null>(null)
+  const [editBannerType, setEditBannerType] = useState<'photo' | 'text' | 'video'>('photo')
+  const [editBannerPhoto, setEditBannerPhoto] = useState('')
+  const [editBannerVideo, setEditBannerVideo] = useState('')
+  const [editBannerText, setEditBannerText] = useState('')
+  const [editBannerUsername, setEditBannerUsername] = useState('')
+
+  const openEditDialog = (ad: AdPurchase) => {
+    const now = new Date()
+    const startDate = new Date(ad.startDate)
+    
+    if (startDate <= now) {
+      toast.error('Cannot edit a live ad. You can only edit ads that haven\'t started yet.')
+      return
+    }
+
+    setEditingAd(ad)
+    setEditBannerType(ad.bannerType || 'photo')
+    setEditBannerPhoto(ad.bannerPhoto || '')
+    setEditBannerVideo(ad.bannerVideo || '')
+    setEditBannerText(ad.bannerText || '')
+    setEditBannerUsername(ad.bannerUsername || user.username)
+  }
+
+  const saveEditedAd = async () => {
+    if (!editingAd) return
+
+    setIsProcessing(true)
+
+    try {
+      const updatedAd: AdPurchase = {
+        ...editingAd,
+        bannerType: editBannerType,
+        bannerPhoto: editBannerType === 'photo' ? editBannerPhoto : undefined,
+        bannerVideo: editBannerType === 'video' ? editBannerVideo : undefined,
+        bannerText: editBannerType === 'text' ? editBannerText : undefined,
+        bannerUsername: editBannerUsername || user.username
+      }
+
+      const updatedActiveAds = (activeAds || []).map(ad => 
+        ad.id === editingAd.id ? updatedAd : ad
+      )
+      const updatedUserAds = (userAds || []).map(ad => 
+        ad.id === editingAd.id ? updatedAd : ad
+      )
+
+      await setActiveAds(updatedActiveAds)
+      await setUserAds(updatedUserAds)
+
+      toast.success('Ad updated successfully!')
+      setEditingAd(null)
+    } catch (error) {
+      toast.error('Failed to update ad')
     } finally {
       setIsProcessing(false)
     }
@@ -345,14 +434,22 @@ Generated: ${new Date().toLocaleString()}
   return (
     <div className="space-y-6">
       <Tabs defaultValue="top-ads" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="top-ads">Top User Ads</TabsTrigger>
-          <TabsTrigger value="trending">Trending</TabsTrigger>
-          <TabsTrigger value="followers">Followers</TabsTrigger>
-          <TabsTrigger value="impressions">Impressions</TabsTrigger>
-          <TabsTrigger value="suggested">Suggested</TabsTrigger>
-          <TabsTrigger value="verification">Verification</TabsTrigger>
-        </TabsList>
+        <div className="relative">
+          <div className="overflow-x-auto pb-2 scrollbar-hide">
+            <TabsList className="inline-flex w-auto min-w-full">
+              <TabsTrigger value="top-ads" className="whitespace-nowrap">Top User Ads</TabsTrigger>
+              <TabsTrigger value="analytics" className="whitespace-nowrap">
+                <ChartLine className="h-4 w-4 mr-1" />
+                Analytics
+              </TabsTrigger>
+              <TabsTrigger value="trending" className="whitespace-nowrap">Trending</TabsTrigger>
+              <TabsTrigger value="followers" className="whitespace-nowrap">Followers</TabsTrigger>
+              <TabsTrigger value="impressions" className="whitespace-nowrap">Impressions</TabsTrigger>
+              <TabsTrigger value="suggested" className="whitespace-nowrap">Suggested</TabsTrigger>
+              <TabsTrigger value="verification" className="whitespace-nowrap">Verification</TabsTrigger>
+            </TabsList>
+          </div>
+        </div>
 
         <TabsContent value="top-ads" className="space-y-6">
           <Card>
@@ -363,6 +460,12 @@ Generated: ${new Date().toLocaleString()}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Ad Policy:</strong> You can edit or cancel scheduled ads before they go live and receive an 85% refund. Once an ad is live, it cannot be modified or refunded.
+                </p>
+              </div>
+
               <div>
                 <Label htmlFor="position">Ad Position</Label>
                 <Select value={position} onValueChange={(value: 'left' | 'center' | 'right') => setPosition(value)}>
@@ -385,12 +488,13 @@ Generated: ${new Date().toLocaleString()}
 
               <div>
                 <Label>Banner Type</Label>
-                <Select value={bannerType} onValueChange={(value: 'photo' | 'text') => setBannerType(value)}>
+                <Select value={bannerType} onValueChange={(value: 'photo' | 'text' | 'video') => setBannerType(value)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="photo">Photo Banner</SelectItem>
+                    <SelectItem value="video">Video Banner (Muted)</SelectItem>
                     <SelectItem value="text">Text Banner</SelectItem>
                   </SelectContent>
                 </Select>
@@ -410,6 +514,33 @@ Generated: ${new Date().toLocaleString()}
                       <img src={bannerPhoto} alt="Banner preview" className="w-full h-full object-cover" />
                     </div>
                   )}
+                </div>
+              ) : bannerType === 'video' ? (
+                <div className="space-y-2">
+                  <Label htmlFor="bannerVideo">Banner Video URL</Label>
+                  <Input
+                    id="bannerVideo"
+                    value={bannerVideo}
+                    onChange={(e) => setBannerVideo(e.target.value)}
+                    placeholder="https://example.com/video.mp4"
+                  />
+                  {bannerVideo && (
+                    <div className="relative w-full h-32 rounded-lg overflow-hidden border">
+                      <video src={bannerVideo} className="w-full h-full object-cover" muted loop autoPlay />
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Video will play on mute and loop automatically
+                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="bannerUsername">Username to Display</Label>
+                    <Input
+                      id="bannerUsername"
+                      value={bannerUsername}
+                      onChange={(e) => setBannerUsername(e.target.value)}
+                      placeholder={`@${user.username}`}
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -529,32 +660,77 @@ Generated: ${new Date().toLocaleString()}
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Calendar className="h-5 w-5" />
-                  Your Active Ads
+                  Your Active & Scheduled Ads
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {userActiveAds.map(ad => (
-                    <div key={ad.id} className="flex items-center justify-between p-3 border rounded-lg bg-green-50">
-                      <div className="flex-1">
-                        <Badge variant="outline" className="mb-1">{ad.position.toUpperCase()} POSITION</Badge>
-                        <p className="text-sm font-medium">
-                          States: {ad.states.includes('ALL') ? 'Nationwide' : ad.states.join(', ')}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Expires: {new Date(ad.endDate).toLocaleDateString()} at {new Date(ad.endDate).toLocaleTimeString()}
-                        </p>
+                  {userActiveAds.map(ad => {
+                    const now = new Date()
+                    const startDate = new Date(ad.startDate)
+                    const isLive = startDate <= now
+                    const isScheduled = startDate > now
+
+                    return (
+                      <div key={ad.id} className={`flex items-center justify-between p-3 border rounded-lg ${isLive ? 'bg-green-50' : 'bg-blue-50'}`}>
+                        <div className="flex-1">
+                          <Badge variant="outline" className="mb-1">{ad.position.toUpperCase()} POSITION</Badge>
+                          <p className="text-sm font-medium">
+                            States: {ad.states.includes('ALL') ? 'Nationwide' : ad.states.join(', ')}
+                          </p>
+                          {isScheduled ? (
+                            <p className="text-xs text-muted-foreground">
+                              Starts: {startDate.toLocaleDateString()} at {startDate.toLocaleTimeString()}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              Expires: {new Date(ad.endDate).toLocaleDateString()} at {new Date(ad.endDate).toLocaleTimeString()}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-2 items-end">
+                          <p className="font-semibold text-green-600">${ad.amount}</p>
+                          <Badge className={isLive ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}>
+                            {isLive ? 'LIVE' : 'SCHEDULED'}
+                          </Badge>
+                          <div className="flex gap-1">
+                            {isScheduled && (
+                              <>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  onClick={() => openEditDialog(ad)} 
+                                  className="gap-1"
+                                >
+                                  <PencilSimple size={14} />
+                                  Edit
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  onClick={() => {
+                                    if (confirm(`Delete this ad and receive an 85% refund ($${Math.floor(ad.amount * 0.85)})?`)) {
+                                      deleteAd(ad.id)
+                                    }
+                                  }}
+                                  className="gap-1 text-red-600 hover:text-red-700"
+                                >
+                                  <Trash size={14} />
+                                  Delete
+                                </Button>
+                              </>
+                            )}
+                            {isLive && (
+                              <Button size="sm" variant="outline" onClick={() => downloadCertificate(ad)} className="gap-1">
+                                <Download size={14} />
+                                Certificate
+                              </Button>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex flex-col gap-2 items-end">
-                        <p className="font-semibold text-green-600">${ad.amount}</p>
-                        <Badge className="bg-green-100 text-green-800">LIVE</Badge>
-                        <Button size="sm" variant="outline" onClick={() => downloadCertificate(ad)} className="gap-1">
-                          <Download size={14} />
-                          Certificate
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -585,6 +761,10 @@ Generated: ${new Date().toLocaleString()}
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="analytics" className="space-y-6">
+          <AdAnalytics user={user} />
         </TabsContent>
 
         <TabsContent value="trending" className="space-y-6">
@@ -865,6 +1045,117 @@ Generated: ${new Date().toLocaleString()}
           <VerificationManager user={user} onUserUpdate={onUserUpdate || (() => {})} />
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!editingAd} onOpenChange={(open) => !open && setEditingAd(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Scheduled Ad</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Editing Ad:</strong> {editingAd?.position.toUpperCase()} Position
+              </p>
+              <p className="text-xs text-blue-700 mt-1">
+                Scheduled for: {editingAd && new Date(editingAd.startDate).toLocaleString()}
+              </p>
+            </div>
+
+            <div>
+              <Label>Banner Type</Label>
+              <Select value={editBannerType} onValueChange={(value: 'photo' | 'text' | 'video') => setEditBannerType(value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="photo">Photo Banner</SelectItem>
+                  <SelectItem value="video">Video Banner (Muted)</SelectItem>
+                  <SelectItem value="text">Text Banner</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {editBannerType === 'photo' ? (
+              <div className="space-y-2">
+                <Label htmlFor="editBannerPhoto">Banner Photo URL</Label>
+                <Input
+                  id="editBannerPhoto"
+                  value={editBannerPhoto}
+                  onChange={(e) => setEditBannerPhoto(e.target.value)}
+                  placeholder="https://example.com/photo.jpg"
+                />
+                {editBannerPhoto && (
+                  <div className="relative w-full h-32 rounded-lg overflow-hidden border">
+                    <img src={editBannerPhoto} alt="Banner preview" className="w-full h-full object-cover" />
+                  </div>
+                )}
+              </div>
+            ) : editBannerType === 'video' ? (
+              <div className="space-y-2">
+                <Label htmlFor="editBannerVideo">Banner Video URL</Label>
+                <Input
+                  id="editBannerVideo"
+                  value={editBannerVideo}
+                  onChange={(e) => setEditBannerVideo(e.target.value)}
+                  placeholder="https://example.com/video.mp4"
+                />
+                {editBannerVideo && (
+                  <div className="relative w-full h-32 rounded-lg overflow-hidden border">
+                    <video src={editBannerVideo} className="w-full h-full object-cover" muted loop autoPlay />
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Video will play on mute and loop automatically
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="editBannerUsername">Username to Display</Label>
+                  <Input
+                    id="editBannerUsername"
+                    value={editBannerUsername}
+                    onChange={(e) => setEditBannerUsername(e.target.value)}
+                    placeholder={`@${user.username}`}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="editBannerText">Banner Text</Label>
+                  <Input
+                    id="editBannerText"
+                    value={editBannerText}
+                    onChange={(e) => setEditBannerText(e.target.value)}
+                    placeholder='Example: "Vote for change" or "Follow for updates"'
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="editBannerUsername">Username to Display</Label>
+                  <Input
+                    id="editBannerUsername"
+                    value={editBannerUsername}
+                    onChange={(e) => setEditBannerUsername(e.target.value)}
+                    placeholder={`@${user.username}`}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Format examples: "quote - @username" or "follow @username because ________"
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <Separator />
+
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setEditingAd(null)}>
+                Cancel
+              </Button>
+              <Button onClick={saveEditedAd} disabled={isProcessing}>
+                {isProcessing ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

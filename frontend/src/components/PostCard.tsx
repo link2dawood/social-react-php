@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useKV } from '@github/spark/hooks'
+import { useState, useRef } from 'react'
+import { useKV } from '@/hooks/use-kv'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -22,7 +22,9 @@ import {
   Copy,
   UserPlus,
   UserMinus,
-  Warning
+  Warning,
+  VideoCamera,
+  X
 } from '@phosphor-icons/react'
 import type { User, Post } from '@/App'
 import { toast } from 'sonner'
@@ -43,6 +45,8 @@ export function PostCard({ post, currentUser, onHashtagClick }: PostCardProps) {
   const [showShareDialog, setShowShareDialog] = useState(false)
   const [showReportDialog, setShowReportDialog] = useState(false)
   const [reportReason, setReportReason] = useState('')
+  const [reportProofVideo, setReportProofVideo] = useState<string | null>(null)
+  const videoInputRef = useRef<HTMLInputElement>(null)
 
   const postUser = users?.find(u => u.id === post.userId)
   const hasLiked = post.likes.some(like => like.userId === currentUser.id)
@@ -289,6 +293,36 @@ export function PostCard({ post, currentUser, onHashtagClick }: PostCardProps) {
     setShowShareDialog(false)
   }
 
+  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('video/')) {
+      toast.error('Please upload a video file')
+      return
+    }
+
+    const maxSize = 50 * 1024 * 1024
+    if (file.size > maxSize) {
+      toast.error('Video file must be smaller than 50MB')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setReportProofVideo(reader.result as string)
+      toast.success('Video proof attached')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleRemoveVideo = () => {
+    setReportProofVideo(null)
+    if (videoInputRef.current) {
+      videoInputRef.current.value = ''
+    }
+  }
+
   const handleReport = async () => {
     if (!reportReason.trim()) {
       toast.error('Please provide a reason for reporting')
@@ -303,7 +337,8 @@ export function PostCard({ post, currentUser, onHashtagClick }: PostCardProps) {
           reports: [...reports, {
             userId: currentUser.id,
             reason: reportReason,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            proofVideo: reportProofVideo || undefined
           }]
         }
       }
@@ -313,6 +348,10 @@ export function PostCard({ post, currentUser, onHashtagClick }: PostCardProps) {
     if (updatedPosts) {
       await setPosts(updatedPosts)
       setReportReason('')
+      setReportProofVideo(null)
+      if (videoInputRef.current) {
+        videoInputRef.current.value = ''
+      }
       setShowReportDialog(false)
       toast.success('Post reported. Our team will review it shortly.')
     }
@@ -566,12 +605,70 @@ export function PostCard({ post, currentUser, onHashtagClick }: PostCardProps) {
               onChange={(e) => setReportReason(e.target.value)}
               rows={4}
             />
+            
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Attach Video Proof (Optional)</label>
+                {reportProofVideo && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemoveVideo}
+                    className="h-8 gap-1 text-destructive hover:text-destructive"
+                  >
+                    <X size={14} />
+                    Remove
+                  </Button>
+                )}
+              </div>
+              
+              {reportProofVideo ? (
+                <div className="relative rounded-lg overflow-hidden border border-border bg-muted">
+                  <video
+                    src={reportProofVideo}
+                    controls
+                    className="w-full max-h-64 object-contain"
+                  />
+                </div>
+              ) : (
+                <>
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept="video/*"
+                    onChange={handleVideoUpload}
+                    className="hidden"
+                    id="report-video-upload"
+                  />
+                  <label htmlFor="report-video-upload">
+                    <Button
+                      variant="outline"
+                      className="w-full gap-2"
+                      asChild
+                    >
+                      <span>
+                        <VideoCamera size={18} />
+                        Upload Video Evidence
+                      </span>
+                    </Button>
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Max file size: 50MB. Supported formats: MP4, MOV, WebM
+                  </p>
+                </>
+              )}
+            </div>
+
             <div className="flex gap-2">
               <Button 
                 variant="outline" 
                 onClick={() => {
                   setShowReportDialog(false)
                   setReportReason('')
+                  setReportProofVideo(null)
+                  if (videoInputRef.current) {
+                    videoInputRef.current.value = ''
+                  }
                 }} 
                 className="flex-1"
               >

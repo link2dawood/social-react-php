@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useKV } from '@github/spark/hooks'
+import { useKV } from '@/hooks/use-kv'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Checkbox } from '@/components/ui/checkbox'
-import { User, PoliticalParty, SiteSettings, Transaction } from '@/App'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { User, PoliticalParty, SiteSettings, Transaction, Post } from '@/App'
 import { 
   CurrencyDollar, 
   UserPlus, 
@@ -21,7 +22,11 @@ import {
   ArrowUp,
   Link as LinkIcon,
   Trash,
-  Receipt
+  Receipt,
+  TrendUp,
+  MusicNotes,
+  Warning,
+  VideoCamera
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
@@ -31,9 +36,11 @@ interface AdminPanelProps {
 
 export function AdminPanel({ user }: AdminPanelProps) {
   const [users, setUsers] = useKV<User[]>('users', [])
+  const [posts, setPosts] = useKV<Post[]>('posts', [])
   const [siteSettings, setSiteSettings] = useKV<SiteSettings | undefined>('siteSettings', undefined)
   const [transactions, setTransactions] = useKV<Transaction[]>('transactions', [])
   const [isProcessing, setIsProcessing] = useState(false)
+  const [selectedReport, setSelectedReport] = useState<{ post: Post; report: NonNullable<Post['reports']>[0]; reportingUser: User | undefined } | null>(null)
   
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [tokenUsername, setTokenUsername] = useState('')
@@ -259,6 +266,36 @@ export function AdminPanel({ user }: AdminPanelProps) {
     }
   }
 
+  const handleDismissReport = async (postId: string, reportIndex: number) => {
+    const updatedPosts = posts?.map(p => {
+      if (p.id === postId && p.reports) {
+        return {
+          ...p,
+          reports: p.reports.filter((_, i) => i !== reportIndex)
+        }
+      }
+      return p
+    })
+
+    if (updatedPosts) {
+      await setPosts(updatedPosts)
+      setSelectedReport(null)
+      toast.success('Report dismissed')
+    }
+  }
+
+  const handleDeletePost = async (postId: string) => {
+    const updatedPosts = posts?.filter(p => p.id !== postId)
+
+    if (updatedPosts) {
+      await setPosts(updatedPosts)
+      setSelectedReport(null)
+      toast.success('Post deleted')
+    }
+  }
+
+  const reportedPosts = posts?.filter(p => p.reports && p.reports.length > 0) || []
+
   const filteredTransactions = (transactions || [])
     .filter(txn => {
       if (filterType !== 'all' && txn.type !== filterType) return false
@@ -304,16 +341,31 @@ export function AdminPanel({ user }: AdminPanelProps) {
       </Card>
 
       <Tabs defaultValue="funds" className="space-y-4">
-        <TabsList className="grid grid-cols-8 w-full">
-          <TabsTrigger value="funds">Funds</TabsTrigger>
-          <TabsTrigger value="transactions">Transactions</TabsTrigger>
-          <TabsTrigger value="tokens">Tokens</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="permissions">Permissions</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-          <TabsTrigger value="footer">Footer</TabsTrigger>
-          <TabsTrigger value="api">API</TabsTrigger>
-        </TabsList>
+        <div className="relative">
+          <div className="overflow-x-auto pb-2 scrollbar-hide">
+            <TabsList className="inline-flex w-auto min-w-full">
+              <TabsTrigger value="funds" className="whitespace-nowrap">Funds</TabsTrigger>
+              <TabsTrigger value="transactions" className="whitespace-nowrap">Transactions</TabsTrigger>
+              <TabsTrigger value="reports" className="whitespace-nowrap">
+                Reports
+                {reportedPosts.length > 0 && (
+                  <Badge variant="destructive" className="ml-2">
+                    {reportedPosts.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="tokens" className="whitespace-nowrap">Tokens</TabsTrigger>
+              <TabsTrigger value="users" className="whitespace-nowrap">Users</TabsTrigger>
+              <TabsTrigger value="permissions" className="whitespace-nowrap">Permissions</TabsTrigger>
+              <TabsTrigger value="engagement" className="whitespace-nowrap">Engagement</TabsTrigger>
+              <TabsTrigger value="autofollow" className="whitespace-nowrap">Auto Follow</TabsTrigger>
+              <TabsTrigger value="royalties" className="whitespace-nowrap">Video Royalties</TabsTrigger>
+              <TabsTrigger value="settings" className="whitespace-nowrap">Settings</TabsTrigger>
+              <TabsTrigger value="footer" className="whitespace-nowrap">Footer</TabsTrigger>
+              <TabsTrigger value="api" className="whitespace-nowrap">API</TabsTrigger>
+            </TabsList>
+          </div>
+        </div>
 
         <TabsContent value="funds" className="space-y-4">
           <Card>
@@ -490,6 +542,234 @@ export function AdminPanel({ user }: AdminPanelProps) {
                       </CardContent>
                     </Card>
                   ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="reports" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Warning size={20} />
+                Reported Posts ({reportedPosts.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {reportedPosts.length === 0 ? (
+                <div className="text-center py-12">
+                  <Warning size={48} className="mx-auto mb-4 text-muted-foreground" />
+                  <h3 className="text-lg font-semibold mb-2">No Reports</h3>
+                  <p className="text-muted-foreground">
+                    All posts are in good standing. Reported posts will appear here for review.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                  {reportedPosts.map((post) => {
+                    const postAuthor = users?.find(u => u.id === post.userId)
+                    return (
+                      <Card key={post.id} className="border-l-4 border-l-destructive">
+                        <CardContent className="p-4">
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex items-start gap-3 flex-1">
+                                <Avatar className="w-10 h-10">
+                                  <AvatarImage src={postAuthor?.avatar} />
+                                  <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                                    {postAuthor?.displayName.split(' ').map(n => n[0]).join('') || 'U'}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium">@{postAuthor?.username || 'Unknown'}</div>
+                                  <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
+                                    {post.content}
+                                  </p>
+                                  {post.video && (
+                                    <div className="mt-2">
+                                      <Badge variant="secondary" className="gap-1">
+                                        <VideoCamera size={14} />
+                                        Contains video
+                                      </Badge>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <Badge variant="destructive">
+                                {post.reports?.length || 0} report{(post.reports?.length || 0) !== 1 ? 's' : ''}
+                              </Badge>
+                            </div>
+
+                            <div className="space-y-2 pl-13">
+                              {post.reports?.map((report, reportIndex) => {
+                                const reportingUser = users?.find(u => u.id === report.userId)
+                                return (
+                                  <div key={reportIndex} className="border rounded-lg p-3 bg-muted/50">
+                                    <div className="flex items-start justify-between gap-3 mb-2">
+                                      <div className="flex items-center gap-2">
+                                        <Avatar className="w-6 h-6">
+                                          <AvatarImage src={reportingUser?.avatar} />
+                                          <AvatarFallback className="text-xs">
+                                            {reportingUser?.displayName.split(' ').map(n => n[0]).join('') || 'U'}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <span className="text-sm font-medium">@{reportingUser?.username || 'Unknown'}</span>
+                                        <span className="text-xs text-muted-foreground">
+                                          {new Date(report.timestamp).toLocaleString()}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <p className="text-sm mb-2">{report.reason}</p>
+                                    
+                                    {report.proofVideo && (
+                                      <div className="mb-2">
+                                        <Badge variant="outline" className="gap-1 mb-2">
+                                          <VideoCamera size={14} />
+                                          Video Evidence Attached
+                                        </Badge>
+                                      </div>
+                                    )}
+
+                                    <div className="flex gap-2 mt-3">
+                                      <Dialog>
+                                        <DialogTrigger asChild>
+                                          <Button 
+                                            variant="outline" 
+                                            size="sm"
+                                            onClick={() => setSelectedReport({ post, report, reportingUser })}
+                                          >
+                                            Review Details
+                                          </Button>
+                                        </DialogTrigger>
+                                        <DialogContent className="max-w-3xl">
+                                          <DialogHeader>
+                                            <DialogTitle>Report Details</DialogTitle>
+                                          </DialogHeader>
+                                          <div className="space-y-4">
+                                            <div>
+                                              <h4 className="font-semibold mb-2">Reported Post</h4>
+                                              <div className="p-4 border rounded-lg bg-muted/50">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                  <Avatar className="w-8 h-8">
+                                                    <AvatarImage src={postAuthor?.avatar} />
+                                                    <AvatarFallback className="text-xs">
+                                                      {postAuthor?.displayName.split(' ').map(n => n[0]).join('')}
+                                                    </AvatarFallback>
+                                                  </Avatar>
+                                                  <span className="font-medium">@{postAuthor?.username}</span>
+                                                </div>
+                                                <p className="text-sm mb-3">{post.content}</p>
+                                                {post.image && (
+                                                  <img src={post.image} alt="Post content" className="w-full rounded-lg mb-2" />
+                                                )}
+                                                {post.video && (
+                                                  <video src={post.video} controls className="w-full rounded-lg" />
+                                                )}
+                                              </div>
+                                            </div>
+
+                                            <div>
+                                              <h4 className="font-semibold mb-2">Report Information</h4>
+                                              <div className="p-4 border rounded-lg space-y-2">
+                                                <div className="flex items-center gap-2">
+                                                  <span className="text-sm font-medium">Reported by:</span>
+                                                  <Avatar className="w-6 h-6">
+                                                    <AvatarImage src={reportingUser?.avatar} />
+                                                    <AvatarFallback className="text-xs">
+                                                      {reportingUser?.displayName.split(' ').map(n => n[0]).join('')}
+                                                    </AvatarFallback>
+                                                  </Avatar>
+                                                  <span className="text-sm">@{reportingUser?.username}</span>
+                                                </div>
+                                                <div>
+                                                  <span className="text-sm font-medium">Reason:</span>
+                                                  <p className="text-sm mt-1">{report.reason}</p>
+                                                </div>
+                                                <div className="text-xs text-muted-foreground">
+                                                  {new Date(report.timestamp).toLocaleString()}
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            {report.proofVideo && (
+                                              <div>
+                                                <h4 className="font-semibold mb-2 flex items-center gap-2">
+                                                  <VideoCamera size={18} />
+                                                  Video Evidence
+                                                </h4>
+                                                <div className="border rounded-lg overflow-hidden bg-black">
+                                                  <video 
+                                                    src={report.proofVideo} 
+                                                    controls 
+                                                    className="w-full max-h-96"
+                                                  />
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            <div className="flex gap-2 pt-4 border-t">
+                                              <Button
+                                                variant="outline"
+                                                onClick={() => {
+                                                  handleDismissReport(post.id, reportIndex)
+                                                }}
+                                                className="flex-1"
+                                              >
+                                                Dismiss Report
+                                              </Button>
+                                              <Button
+                                                variant="destructive"
+                                                onClick={() => {
+                                                  if (confirm('Are you sure you want to delete this post? This action cannot be undone.')) {
+                                                    handleDeletePost(post.id)
+                                                  }
+                                                }}
+                                                className="flex-1"
+                                              >
+                                                <Trash size={16} className="mr-2" />
+                                                Delete Post
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        </DialogContent>
+                                      </Dialog>
+                                      
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={() => {
+                                          handleDismissReport(post.id, reportIndex)
+                                        }}
+                                      >
+                                        Dismiss
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+
+                            <div className="flex gap-2 pt-3 border-t">
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => {
+                                  if (confirm('Delete this post and all its reports? This cannot be undone.')) {
+                                    handleDeletePost(post.id)
+                                  }
+                                }}
+                                className="gap-2"
+                              >
+                                <Trash size={16} />
+                                Delete Post
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
                 </div>
               )}
             </CardContent>
@@ -694,6 +974,259 @@ export function AdminPanel({ user }: AdminPanelProps) {
                   </Button>
                 </>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="engagement" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendUp size={20} />
+                Custom Engagement
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Add users to priority engagement - their posts will appear first in feeds for all users
+              </p>
+
+              <div className="space-y-2">
+                <Label htmlFor="engagementUsername">Username</Label>
+                <Input
+                  id="engagementUsername"
+                  placeholder="Enter username"
+                />
+              </div>
+
+              <Button 
+                className="w-full gap-2"
+                onClick={async () => {
+                  const username = (document.getElementById('engagementUsername') as HTMLInputElement)?.value
+                  if (!username) {
+                    toast.error('Please enter a username')
+                    return
+                  }
+
+                  const targetUser = users?.find(u => u.username.toLowerCase() === username.toLowerCase())
+                  if (!targetUser) {
+                    toast.error('User not found')
+                    return
+                  }
+
+                  const updatedUsers = users?.map(u => 
+                    u.id === targetUser.id ? { ...u, inAutoFollowProgram: true } : u
+                  )
+                  await setUsers(updatedUsers || [])
+                  toast.success(`Added @${targetUser.username} to priority engagement`)
+                }}
+              >
+                <TrendUp />
+                Enable Priority Engagement
+              </Button>
+
+              <div className="mt-6">
+                <Label className="text-base font-semibold mb-3 block">Users with Priority Engagement</Label>
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {users?.filter(u => u.inAutoFollowProgram).map(u => (
+                    <div key={u.id} className="flex items-center justify-between p-3 border rounded-lg bg-green-50">
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <div className="font-medium">@{u.username}</div>
+                          <div className="text-sm text-muted-foreground">{u.displayName}</div>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          const updatedUsers = users?.map(user => 
+                            user.id === u.id ? { ...user, inAutoFollowProgram: false } : user
+                          )
+                          await setUsers(updatedUsers || [])
+                          toast.success(`Removed @${u.username} from priority engagement`)
+                        }}
+                      >
+                        <Trash size={16} />
+                      </Button>
+                    </div>
+                  ))}
+                  {!users?.some(u => u.inAutoFollowProgram) && (
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                      No users added to priority engagement yet
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="autofollow" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserPlus size={20} />
+                Add to Auto Follow
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Add users to auto-follow program - they will be automatically followed by all new users who opt-in during signup
+              </p>
+
+              <div className="space-y-2">
+                <Label htmlFor="autoFollowUsername">Username</Label>
+                <Input
+                  id="autoFollowUsername"
+                  placeholder="Enter username"
+                />
+              </div>
+
+              <Button 
+                className="w-full gap-2"
+                onClick={async () => {
+                  const username = (document.getElementById('autoFollowUsername') as HTMLInputElement)?.value
+                  if (!username) {
+                    toast.error('Please enter a username')
+                    return
+                  }
+
+                  const targetUser = users?.find(u => u.username.toLowerCase() === username.toLowerCase())
+                  if (!targetUser) {
+                    toast.error('User not found')
+                    return
+                  }
+
+                  const updatedUsers = users?.map(u => 
+                    u.id === targetUser.id ? { ...u, inAutoFollowProgram: true } : u
+                  )
+                  await setUsers(updatedUsers || [])
+                  toast.success(`Added @${targetUser.username} to auto-follow program`)
+                }}
+              >
+                <UserPlus />
+                Add to Auto Follow
+              </Button>
+
+              <div className="mt-6">
+                <Label className="text-base font-semibold mb-3 block">Auto-Follow Program Members</Label>
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {users?.filter(u => u.inAutoFollowProgram).map(u => (
+                    <div key={u.id} className="flex items-center justify-between p-3 border rounded-lg bg-primary/5">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="w-10 h-10">
+                          <AvatarImage src={u.avatar} />
+                          <AvatarFallback>
+                            {u.displayName.split(' ').map(n => n[0]).join('')}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-medium">@{u.username}</div>
+                          <div className="text-sm text-muted-foreground">{u.displayName}</div>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          const updatedUsers = users?.map(user => 
+                            user.id === u.id ? { ...user, inAutoFollowProgram: false } : user
+                          )
+                          await setUsers(updatedUsers || [])
+                          toast.success(`Removed @${u.username} from auto-follow program`)
+                        }}
+                      >
+                        <Trash size={16} />
+                      </Button>
+                    </div>
+                  ))}
+                  {!users?.some(u => u.inAutoFollowProgram) && (
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                      No users in auto-follow program yet
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="royalties" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MusicNotes size={20} />
+                Video Music Royalties
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <p className="text-sm text-muted-foreground">
+                Control whether music creators receive royalties when their uploaded music is used in videos
+              </p>
+
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="space-y-1">
+                  <Label htmlFor="royaltiesToggle" className="text-base font-semibold cursor-pointer">
+                    Enable Video Royalties
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    When enabled, music creators earn a percentage each time their track is used
+                  </p>
+                </div>
+                <Checkbox
+                  id="royaltiesToggle"
+                  checked={siteSettings?.videoRoyaltiesEnabled || false}
+                  onCheckedChange={async (checked) => {
+                    if (siteSettings) {
+                      await setSiteSettings({
+                        ...siteSettings,
+                        videoRoyaltiesEnabled: checked as boolean
+                      })
+                      toast.success(checked ? 'Video royalties enabled' : 'Video royalties disabled')
+                    }
+                  }}
+                />
+              </div>
+
+              {siteSettings?.videoRoyaltiesEnabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="royaltyPercentage">Royalty Percentage</Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      id="royaltyPercentage"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={siteSettings?.videoRoyaltyPercentage || 10}
+                      onChange={async (e) => {
+                        const value = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0))
+                        if (siteSettings) {
+                          await setSiteSettings({
+                            ...siteSettings,
+                            videoRoyaltyPercentage: value
+                          })
+                        }
+                      }}
+                      className="max-w-[150px]"
+                    />
+                    <span className="text-sm text-muted-foreground">% per video view</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Music creators will earn this percentage of ad revenue when their music is used
+                  </p>
+                </div>
+              )}
+
+              <div className="bg-muted p-4 rounded-lg space-y-2">
+                <h4 className="font-semibold text-sm">How it works:</h4>
+                <ul className="text-sm text-muted-foreground space-y-1 list-disc pl-5">
+                  <li>Users upload their own music tracks to the platform</li>
+                  <li>Other users can select these tracks for their videos</li>
+                  <li>When enabled, creators earn royalties based on video performance</li>
+                  <li>Royalties are automatically credited to creator accounts</li>
+                </ul>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

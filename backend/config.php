@@ -33,6 +33,15 @@ define('JWT_SECRET', Env::get('JWT_SECRET', 'change-this-in-production'));
 // CORS Configuration
 $corsOrigins = Env::get('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000,http://localhost:5000');
 $corsOriginsArray = array_map('trim', explode(',', $corsOrigins));
+
+// Ensure APP_URL (frontend/theme URL) is always allowed if set
+if (defined('APP_URL') && APP_URL) {
+    $appUrl = rtrim(APP_URL, '/');
+    if (!in_array($appUrl, $corsOriginsArray, true)) {
+        $corsOriginsArray[] = $appUrl;
+    }
+}
+
 // Add both localhost and 127.0.0.1 variants for each port
 $expandedOrigins = [];
 foreach ($corsOriginsArray as $origin) {

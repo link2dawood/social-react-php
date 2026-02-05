@@ -1,20 +1,33 @@
 import { useState } from 'react'
-import { useKV } from '@github/spark/hooks'
+import { useKV } from '@/hooks/use-kv'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { ChatCircle, PaperPlaneTilt, UserPlus } from '@phosphor-icons/react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Checkbox } from '@/components/ui/checkbox'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { ChatCircle, PaperPlaneTilt, UserPlus, Users, Star, StarFour } from '@phosphor-icons/react'
 import type { User } from '@/App'
 import { toast } from 'sonner'
 
 interface Message {
   id: string
   fromUserId: string
-  toUserId: string
+  toUserId?: string
+  groupId?: string
   content: string
   timestamp: string
+}
+
+interface GroupChat {
+  id: string
+  name: string
+  createdBy: string
+  members: string[]
+  createdAt: string
 }
 
 interface MessagesPanel {
@@ -22,48 +35,104 @@ interface MessagesPanel {
 }
 
 export function MessagesPanel({ user }: MessagesPanel) {
-  const [messages] = useKV<Message[]>('messages', [])
+  const [messages, setMessages] = useKV<Message[]>('messages', [])
   const [users] = useKV<User[]>('users', [])
+  const [groups, setGroups] = useKV<GroupChat[]>('groupChats', [])
+  const [favoriteContacts, setFavoriteContacts] = useKV<string[]>(`favoriteContacts_${user.id}`, [])
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null)
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
   const [newMessage, setNewMessage] = useState('')
+  const [showNewGroupDialog, setShowNewGroupDialog] = useState(false)
+  const [newGroupName, setNewGroupName] = useState('')
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([])
+  const [activeTab, setActiveTab] = useState<'all' | 'favorites' | 'groups'>('all')
 
-  const conversations = (users || [])
-    .filter(u => u.id !== user.id && user.friends.includes(u.id))
-    .map(friend => {
-      const conversationMessages = (messages || []).filter(m => 
-        (m.fromUserId === user.id && m.toUserId === friend.id) ||
-        (m.fromUserId === friend.id && m.toUserId === user.id)
-      )
-      const lastMessage = conversationMessages[conversationMessages.length - 1]
-      return {
-        friend,
-        lastMessage,
-        messageCount: conversationMessages.length
-      }
-    })
+  const friends = (users || []).filter(u => u.id !== user.id && user.friends.includes(u.id))
+  
+  const conversations = friends.map(friend => {
+    const conversationMessages = (messages || []).filter(m => 
+      (m.fromUserId === user.id && m.toUserId === friend.id) ||
+      (m.fromUserId === friend.id && m.toUserId === user.id)
+    )
+    const lastMessage = conversationMessages[conversationMessages.length - 1]
+    return {
+      friend,
+      lastMessage,
+      messageCount: conversationMessages.length,
+      isFavorite: (favoriteContacts || []).includes(friend.id)
+    }
+  })
+
+  const favoriteConversations = conversations.filter(c => c.isFavorite)
+  const userGroups = (groups || []).filter(g => g.members.includes(user.id))
 
   const selectedUser = users?.find(u => u.id === selectedConversation)
+  const selectedGroupData = groups?.find(g => g.id === selectedGroup)
+  
   const conversationMessages = selectedConversation 
     ? (messages || []).filter(m => 
         (m.fromUserId === user.id && m.toUserId === selectedConversation) ||
         (m.fromUserId === selectedConversation && m.toUserId === user.id)
       )
+    : selectedGroup
+    ? (messages || []).filter(m => m.groupId === selectedGroup)
     : []
 
-  const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedConversation) return
+  const toggleFavorite = (userId: string) => {
+    setFavoriteContacts(current => {
+      const currentContacts = current || []
+      if (currentContacts.includes(userId)) {
+        return currentContacts.filter(id => id !== userId)
+      }
+      return [...currentContacts, userId]
+    })
+    toast.success((favoriteContacts || []).includes(userId) ? 'Removed from favorites' : 'Added to favorites')
+  }
+
+  const handleSendMessage = () => {
+    if (!newMessage.trim() || (!selectedConversation && !selectedGroup)) return
 
     const message: Message = {
       id: `message_${Date.now()}`,
       fromUserId: user.id,
-      toUserId: selectedConversation,
+      toUserId: selectedConversation || undefined,
+      groupId: selectedGroup || undefined,
       content: newMessage,
       timestamp: new Date().toISOString()
     }
 
-    // In a real app, this would update the messages array
+    setMessages(current => [...(current || []), message])
     setNewMessage('')
     toast.success('Message sent!')
+  }
+
+  const handleCreateGroup = () => {
+    if (!newGroupName.trim() || selectedMembers.length === 0) {
+      toast.error('Please enter a group name and select members')
+      return
+    }
+
+    const newGroup: GroupChat = {
+      id: `group_${Date.now()}`,
+      name: newGroupName,
+      createdBy: user.id,
+      members: [user.id, ...selectedMembers],
+      createdAt: new Date().toISOString()
+    }
+
+    setGroups(current => [...(current || []), newGroup])
+    setShowNewGroupDialog(false)
+    setNewGroupName('')
+    setSelectedMembers([])
+    toast.success(`Group "${newGroupName}" created!`)
+  }
+
+  const toggleMemberSelection = (userId: string) => {
+    setSelectedMembers(current => 
+      current.includes(userId) 
+        ? current.filter(id => id !== userId)
+        : [...current, userId]
+    )
   }
 
   return (

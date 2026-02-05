@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
-import { useKV } from '@github/spark/hooks'
+import { useState, useRef } from 'react'
+import { useKV } from '@/hooks/use-kv'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { PostCard } from '@/components/PostCard'
 import { FavoriteUsersDisplay } from '@/components/FavoriteUsersDisplay'
 import { 
@@ -20,11 +21,12 @@ import {
   Building,
   Scales,
   Camera,
-  Image as ImageIcon
+  Image as ImageIcon,
+  UserPlus,
+  UserMinus
 } from '@phosphor-icons/react'
-import type { User, Post, PoliticalParty } from '@/App'
+import type { User, Post } from '@/App'
 import { toast } from 'sonner'
-import api from '@/lib/api'
 
 interface ProfilePanelProps {
   user: User
@@ -38,43 +40,10 @@ export function ProfilePanel({ user, currentUser, onUserUpdate }: ProfilePanelPr
   
   const [, setCurrentUser] = useKV<User | null>('currentUser', null)
   const [users, setUsers] = useKV<User[]>('users', [])
-  const [posts, setPosts] = useKV<Post[]>('posts', [])
+  const [posts] = useKV<Post[]>('posts', [])
   const [isEditing, setIsEditing] = useState(false)
-  
-  // Load posts from backend when viewing profile
-  useEffect(() => {
-    const loadPosts = async () => {
-      try {
-        const backendPosts = await api.getPosts({ limit: 100 })
-        const postsArray = Array.isArray(backendPosts) 
-          ? backendPosts 
-          : (backendPosts?.posts || backendPosts?.data || [])
-        
-        const transformedPosts: Post[] = postsArray.map((p: any) => ({
-          id: String(p.id),
-          userId: String(p.userId),
-          content: p.content || '',
-          image: p.image || undefined,
-          video: p.video || undefined,
-          type: p.type || 'post',
-          party: (p.party || 'independent') as PoliticalParty,
-          timestamp: p.timestamp || new Date().toISOString(),
-          likes: p.likes || [],
-          comments: p.comments || [],
-          tips: p.tips || [],
-          shares: p.shares || 0
-        }))
-        
-        transformedPosts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        setPosts(transformedPosts)
-      } catch (error) {
-        console.error('Failed to load posts for profile:', error)
-        // Keep existing posts from localStorage if backend fails
-      }
-    }
-    
-    loadPosts()
-  }, [user.id]) // Reload when viewing different user
+  const [showFollowersDialog, setShowFollowersDialog] = useState(false)
+  const [showFollowingDialog, setShowFollowingDialog] = useState(false)
   const [editForm, setEditForm] = useState({
     displayName: user.displayName,
     bio: user.bio || '',
@@ -84,6 +53,52 @@ export function ProfilePanel({ user, currentUser, onUserUpdate }: ProfilePanelPr
   })
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const bannerInputRef = useRef<HTMLInputElement>(null)
+
+  const isFollowing = actualCurrentUser.following?.includes(user.id) || false
+
+  const handleFollowToggle = async () => {
+    if (isOwnProfile) return
+
+    const updatedUsers = (users || []).map(u => {
+      if (u.id === actualCurrentUser.id) {
+        const following = u.following || []
+        return {
+          ...u,
+          following: isFollowing
+            ? following.filter(id => id !== user.id)
+            : [...following, user.id]
+        }
+      }
+      if (u.id === user.id) {
+        const followers = u.followers || []
+        return {
+          ...u,
+          followers: isFollowing
+            ? followers.filter(id => id !== actualCurrentUser.id)
+            : [...followers, actualCurrentUser.id],
+          followerCount: isFollowing
+            ? Math.max(0, (u.followerCount || 0) - 1)
+            : (u.followerCount || 0) + 1
+        }
+      }
+      return u
+    })
+
+    await setUsers(updatedUsers)
+    if (onUserUpdate) {
+      const updatedUser = updatedUsers.find(u => u.id === user.id)
+      if (updatedUser) onUserUpdate(updatedUser)
+    }
+    toast.success(isFollowing ? `Unfollowed @${user.username}` : `Following @${user.username}`)
+  }
+
+  const getFollowers = () => {
+    return (users || []).filter(u => (user.followers || []).includes(u.id))
+  }
+
+  const getFollowing = () => {
+    return (users || []).filter(u => (user.following || []).includes(u.id))
+  }
 
   const userPosts = (posts || []).filter(post => post.userId === user.id)
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
@@ -315,19 +330,99 @@ export function ProfilePanel({ user, currentUser, onUserUpdate }: ProfilePanelPr
                 )}
 
                 <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <Users size={16} />
-                    <span className="font-medium text-foreground">{(user.followerCount || 0).toLocaleString()}</span> followers
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Users size={16} />
-                    <span className="font-medium text-foreground">{user.following?.length || 0}</span> following
-                  </div>
+                  <Dialog open={showFollowersDialog} onOpenChange={setShowFollowersDialog}>
+                    <DialogTrigger asChild>
+                      <button className="flex items-center gap-1 hover:text-primary transition-colors">
+                        <Users size={16} />
+                        <span className="font-medium text-foreground">{(user.followerCount || 0).toLocaleString()}</span> followers
+                      </button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Followers</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                        {getFollowers().length === 0 ? (
+                          <p className="text-center text-muted-foreground py-8">No followers yet</p>
+                        ) : (
+                          getFollowers().map(follower => (
+                            <div key={follower.id} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50">
+                              <Avatar className="w-10 h-10">
+                                <AvatarImage src={follower.avatar} />
+                                <AvatarFallback>
+                                  {follower.displayName.split(' ').map(n => n[0]).join('')}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1">
+                                <div className="font-semibold">{follower.displayName}</div>
+                                <div className="text-sm text-muted-foreground">@{follower.username}</div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+
+                  <Dialog open={showFollowingDialog} onOpenChange={setShowFollowingDialog}>
+                    <DialogTrigger asChild>
+                      <button className="flex items-center gap-1 hover:text-primary transition-colors">
+                        <Users size={16} />
+                        <span className="font-medium text-foreground">{user.following?.length || 0}</span> following
+                      </button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Following</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                        {getFollowing().length === 0 ? (
+                          <p className="text-center text-muted-foreground py-8">Not following anyone yet</p>
+                        ) : (
+                          getFollowing().map(following => (
+                            <div key={following.id} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50">
+                              <Avatar className="w-10 h-10">
+                                <AvatarImage src={following.avatar} />
+                                <AvatarFallback>
+                                  {following.displayName.split(' ').map(n => n[0]).join('')}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1">
+                                <div className="font-semibold">{following.displayName}</div>
+                                <div className="text-sm text-muted-foreground">@{following.username}</div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+
                   <div className="flex items-center gap-1">
                     <FileText size={16} />
                     <span className="font-medium text-foreground">{userPosts.length}</span> posts
                   </div>
                 </div>
+
+                {!isOwnProfile && (
+                  <Button
+                    onClick={handleFollowToggle}
+                    variant={isFollowing ? "outline" : "default"}
+                    className="gap-2"
+                  >
+                    {isFollowing ? (
+                      <>
+                        <UserMinus size={18} />
+                        Unfollow
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus size={18} />
+                        Follow
+                      </>
+                    )}
+                  </Button>
+                )}
 
                 <div className="text-xs text-muted-foreground">
                   Member since {new Date(user.joinDate).toLocaleDateString()}

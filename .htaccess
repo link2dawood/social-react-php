@@ -1,5 +1,9 @@
+# Ensure root and SPA routes serve the app
+DirectoryIndex index.html
+
 # Enable rewrite engine
 RewriteEngine On
+RewriteBase /
 
 # Allow backend PHP files to be served directly
 RewriteCond %{REQUEST_URI} ^/backend/

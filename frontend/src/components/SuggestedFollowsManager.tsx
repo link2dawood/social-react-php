@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useKV } from '@github/spark/hooks'
+import { useKV } from '@/hooks/use-kv'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,9 +21,10 @@ export function SuggestedFollowsManager({ user, onUserUpdate }: SuggestedFollows
   const [users, setUsers] = useKV<User[]>('users', [])
   const [selectedSlot, setSelectedSlot] = useState<number>(0)
   const [duration, setDuration] = useState<'1' | '7' | '30'>('1')
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
 
-  const defaultRate = 50
+  const defaultRate = 1000
   const rate = user.suggestedFollowsRate || defaultRate
 
   const durationMultipliers = {
@@ -42,12 +43,13 @@ export function SuggestedFollowsManager({ user, onUserUpdate }: SuggestedFollows
   const handlePurchaseSlot = async () => {
     const cost = calculateCost()
 
-    if (user.tokens < cost) {
-      toast.error('Insufficient tokens')
+    if ((user.earnings || 0) < cost) {
+      toast.error('Insufficient funds')
       return
     }
 
-    const expiresAt = new Date()
+    const scheduledStart = new Date(selectedDate)
+    const expiresAt = new Date(scheduledStart)
     expiresAt.setDate(expiresAt.getDate() + parseInt(duration))
 
     const updatedUsers = (users || []).map(u => {
@@ -63,12 +65,13 @@ export function SuggestedFollowsManager({ user, onUserUpdate }: SuggestedFollows
           slotIndex: selectedSlot,
           userId: user.id,
           expiresAt: expiresAt.toISOString(),
+          scheduledDate: scheduledStart.toISOString(),
           rate: rate
         })
 
         return {
           ...u,
-          tokens: u.tokens - cost,
+          earnings: (u.earnings || 0) - cost,
           suggestedFollowsSlots: newSlots
         }
       }
@@ -81,7 +84,7 @@ export function SuggestedFollowsManager({ user, onUserUpdate }: SuggestedFollows
       onUserUpdate(updatedUser)
     }
 
-    toast.success(`Purchased slot ${selectedSlot + 1} for ${duration} day(s)!`)
+    toast.success(`Purchased slot ${selectedSlot + 1} for ${duration} day(s) starting ${scheduledStart.toLocaleDateString()}!`)
     setIsDialogOpen(false)
   }
 
@@ -198,6 +201,16 @@ export function SuggestedFollowsManager({ user, onUserUpdate }: SuggestedFollows
                           </DialogHeader>
                           <div className="space-y-4">
                             <div>
+                              <Label>Start Date</Label>
+                              <Input
+                                type="date"
+                                value={selectedDate}
+                                onChange={(e) => setSelectedDate(e.target.value)}
+                                min={new Date().toISOString().split('T')[0]}
+                              />
+                            </div>
+
+                            <div>
                               <Label>Duration</Label>
                               <Select value={duration} onValueChange={(v) => setDuration(v as '1' | '7' | '30')}>
                                 <SelectTrigger>
@@ -214,7 +227,11 @@ export function SuggestedFollowsManager({ user, onUserUpdate }: SuggestedFollows
                             <div className="p-4 bg-muted rounded-lg space-y-2">
                               <div className="flex justify-between">
                                 <span className="text-muted-foreground">Rate per day</span>
-                                <span className="font-medium">{rate} tokens</span>
+                                <span className="font-medium">${rate}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Start date</span>
+                                <span className="font-medium">{new Date(selectedDate).toLocaleDateString()}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-muted-foreground">Duration</span>
@@ -222,21 +239,21 @@ export function SuggestedFollowsManager({ user, onUserUpdate }: SuggestedFollows
                               </div>
                               <div className="border-t pt-2 flex justify-between">
                                 <span className="font-semibold">Total Cost</span>
-                                <span className="font-bold text-lg">{calculateCost()} tokens</span>
+                                <span className="font-bold text-lg">${calculateCost()}</span>
                               </div>
                             </div>
 
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Star size={16} className="text-accent" />
-                              <span>Your balance: {user.tokens} tokens</span>
+                              <span>Your balance: ${user.earnings.toFixed(2)}</span>
                             </div>
 
                             <Button 
                               className="w-full" 
                               onClick={handlePurchaseSlot}
-                              disabled={user.tokens < calculateCost()}
+                              disabled={(user.earnings || 0) < calculateCost()}
                             >
-                              Purchase for {calculateCost()} tokens
+                              Purchase for ${calculateCost()}
                             </Button>
                           </div>
                         </DialogContent>
